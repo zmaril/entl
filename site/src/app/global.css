@@ -1,0 +1,66 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+/* Entl theme — a duckling in a Tyrolean hat: hunter-green primary + duckling-yellow accent. */
+:root {
+  --color-fd-primary: hsl(137 42% 30%);
+  --color-fd-ring: hsl(137 42% 30%);
+  --entl-yellow: #f4cf3f;
+  --entl-yellow-dark: #e3bb24;
+  --entl-ink: #1e4b2a;
+  --entl-green-deep: #18421f;
+  --entl-green: #2b6a3c;
+}
+
+.dark {
+  --color-fd-primary: hsl(140 40% 63%);
+  --color-fd-ring: hsl(140 40% 63%);
+  --entl-yellow: #f7d860;
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+/* The duckling button — warm yellow with dark ink (landing CTA). */
+.btn-duck {
+  background-color: var(--entl-yellow);
+  color: var(--entl-ink);
+  font-weight: 600;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+.btn-duck:hover {
+  background-color: var(--entl-yellow-dark);
+  transform: translateY(-1px);
+}
+
+/* Display face for the wordmark + headings. */
+.font-display {
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* Hero wordmark — white→yellow gradient fill (reads on the green hero). */
+.text-wordmark {
+  background: linear-gradient(92deg, #ffffff 35%, var(--entl-yellow));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Feature card — soft hover lift. */
+.feature-card {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.feature-card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--entl-green) 45%, transparent);
+  box-shadow: 0 12px 28px -12px rgba(24, 66, 31, 0.35);
+}

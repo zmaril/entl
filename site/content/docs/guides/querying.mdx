@@ -1,0 +1,74 @@
+---
+title: Querying pull requests
+description: Join PRs, comments, and CI to answer real questions about a repo.
+---
+
+Because everything is one DuckDB, the interesting questions are just joins. Here's "which open PRs are conflicting and have a failing CI check?" — the kind of thing a dashboard would otherwise stitch together from three API calls.
+
+<Tabs groupId="lang" persist items={['SQL', 'Node', 'CLI']}>
+  <Tab value="SQL">
+    ```sql
+    SELECT number, title, mergeable, checks
+    FROM gh_pull_requests
+    WHERE state = 'OPEN'
+      AND mergeable = 'CONFLICTING'
+      AND checks = 'FAILURE'
+    ORDER BY updated_at DESC;
+    ```
+  </Tab>
+  <Tab value="Node">
+    ```ts
+    const rows = JSON.parse(await entl.query(`
+      SELECT number, title, mergeable, checks
+      FROM gh_pull_requests
+      WHERE state = 'OPEN' AND mergeable = 'CONFLICTING' AND checks = 'FAILURE'
+    `));
+    ```
+  </Tab>
+  <Tab value="CLI">
+    ```sh
+    duckdb data.duckdb "
+      SELECT number, title, mergeable, checks
+      FROM gh_pull_requests
+      WHERE state='OPEN' AND mergeable='CONFLICTING' AND checks='FAILURE'"
+    ```
+  </Tab>
+</Tabs>
+
+## The latest comment on each open PR
+
+A `JOIN` to `gh_comments`, newest per PR:
+
+<Tabs groupId="lang" persist items={['SQL', 'Node', 'CLI']}>
+  <Tab value="SQL">
+    ```sql
+    SELECT pr.number, pr.title, c.body, c.created_at
+    FROM gh_pull_requests pr
+    JOIN gh_comments c
+      ON c.subject_type = 'pr' AND c.subject_number = pr.number
+    QUALIFY row_number() OVER (PARTITION BY pr.number ORDER BY c.created_at DESC) = 1
+    WHERE pr.state = 'OPEN';
+    ```
+  </Tab>
+  <Tab value="Node">
+    ```ts
+    const rows = JSON.parse(await entl.query(`
+      SELECT pr.number, pr.title, c.body, c.created_at
+      FROM gh_pull_requests pr
+      JOIN gh_comments c ON c.subject_type = 'pr' AND c.subject_number = pr.number
+      QUALIFY row_number() OVER (PARTITION BY pr.number ORDER BY c.created_at DESC) = 1
+      WHERE pr.state = 'OPEN'
+    `));
+    ```
+  </Tab>
+  <Tab value="CLI">
+    ```sh
+    duckdb data.duckdb "<the SQL from the SQL tab>"
+    ```
+  </Tab>
+</Tabs>
+
+<Callout type="info">
+Diffs aren't in the tables — they're computed on demand from git objects. See the
+[Node API](/docs/reference/node-api) for `diffCommits` and `fileAt`.
+</Callout>

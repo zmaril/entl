@@ -1,0 +1,183 @@
+---
+title: Rust API
+description: The entl-core crate — generated from its public source.
+---
+
+{/* AUTO-GENERATED from crates/entl-core/src/*.rs by scripts/gen-reference.ts — run `bun run gen`. Do not edit by hand. */}
+
+# Rust API
+
+The `entl-core` crate — the engine itself. The public surface re-exported from `lib.rs`.
+
+<Callout>
+Generated from the crate source.
+</Callout>
+
+## Types
+
+### `ConflictStats`
+
+```rust
+struct ConflictStats {
+    pub merges_analyzed: usize,
+    pub octopus_skipped: usize,
+    pub no_base_skipped: usize,
+    pub conflict_paths: usize,
+    pub unresolved_paths: usize,
+}
+```
+
+### `Db`
+
+An open entl database.
+
+```rust
+struct Db {
+    pub conn: Connection,
+}
+
+impl Db {
+    fn open(path: &str) -> Result<Self>;
+    fn from_conn(conn: Connection) -> Self;
+    fn migrate(&self) -> Result<()>;
+    fn applied_migrations(&self) -> Result<i64>;
+    fn query_table(&self, sql: &str) -> Result<String>;
+}
+```
+
+### `FileDiff`
+
+```rust
+struct FileDiff {
+    pub path: String,
+    pub old_path: Option<String>,
+    /// A | M | D | R
+    pub status: &'static str,
+    pub additions: i64,
+    pub deletions: i64,
+    /// Full single-file unified patch (`diff --git` header + hunks). Empty for
+    /// binary files (either side non-UTF-8), matching what GitHub omits.
+    pub patch: String,
+}
+```
+
+### `GithubIngest`
+
+```rust
+struct GithubIngest {
+    pub pull_requests: usize,
+    pub reviews: usize,
+    pub review_comments: usize,
+    pub issues: usize,
+    pub comments: usize,
+    pub workflow_runs: usize,
+    pub check_runs: usize,
+    pub users: usize,
+    pub events: usize,
+    pub truncated: usize,
+}
+```
+
+### `GitIngest`
+
+```rust
+struct GitIngest {
+    pub new_commits: usize,
+    pub file_changes: usize,
+    pub refs: usize,
+}
+```
+
+
+## Functions
+
+### `analyze_conflicts`
+
+```rust
+fn analyze_conflicts(
+    db: &Db,
+    path: &str,
+    mut on_progress: impl FnMut(u64),
+) -> Result<ConflictStats>
+```
+
+### `diff_commits`
+
+Per-file diff between two commits. With `three_dot`, the base is shifted to the
+merge-base of (base, head) — GitHub's `base...head` PR diff.
+
+```rust
+fn diff_commits(
+    repo_path: &str,
+    base_hex: &str,
+    head_hex: &str,
+    three_dot: bool,
+) -> Result<Vec<FileDiff>>
+```
+
+### `file_at`
+
+Full UTF-8 text of `path` at `commit`, or `None` if absent/binary. For PR-review
+context expansion (old/new side).
+
+```rust
+fn file_at(repo_path: &str, commit_hex: &str, path: &str) -> Result<Option<String>>
+```
+
+### `branch_exists`
+
+True if `name` resolves to a commit, following git's normal ref precedence
+(mirrors `git rev-parse --verify <name>`). The caller asks for `origin/<name>`
+explicitly when it wants the remote-tracking ref — so this stays exact, keeping
+worktree-add's local-vs-remote branching correct.
+
+```rust
+fn branch_exists(repo_path: &str, name: &str) -> Result<bool>
+```
+
+### `commit_bodies`
+
+Commit message bodies for every commit reachable from `branch` (mirrors
+`git log <branch> --format=%B%x00`), NUL-separated. Seeds the walk from *both*
+the local branch and `origin/<branch>`, so a just-fetched merge on `origin/main`
+is scanned even when local `main` hasn't been pulled — the freshness reconcile's
+trailer scan needs. "" when neither resolves.
+
+```rust
+fn commit_bodies(repo_path: &str, branch: &str) -> Result<String>
+```
+
+### `current_branch`
+
+The checked-out branch (HEAD's short name), or "HEAD" when detached.
+
+```rust
+fn current_branch(repo_path: &str) -> Result<String>
+```
+
+### `ls_remote_heads`
+
+Remote branch names (without the `refs/heads/` prefix) matching `pattern` — a
+trailing-`*` glob like `refs/heads/pm/task-12*` or `pm/task-12*`. Reads the
+`origin/*` remote-tracking refs; mirrors `git ls-remote --heads origin <pattern>`.
+Fetch first for freshness.
+
+```rust
+fn ls_remote_heads(repo_path: &str, pattern: &str) -> Result<Vec<String>>
+```
+
+### `ingest_github`
+
+Ingest GitHub data for the repo at `path` into `db`.
+
+```rust
+fn ingest_github(db: &Db, path: &str) -> Result<GithubIngest>
+```
+
+### `ingest_git`
+
+Ingest git history. `counter` is incremented per commit for live progress.
+
+```rust
+fn ingest_git(db: &Db, path: &str, counter: &AtomicU64) -> Result<GitIngest>
+```

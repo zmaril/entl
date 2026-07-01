@@ -1,0 +1,9 @@
+# Rust build output
+/target
+
+# DuckDB databases
+*.duckdb
+*.duckdb.wal
+
+# OS / editor
+.DS_Store

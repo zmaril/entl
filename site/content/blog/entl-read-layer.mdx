@@ -1,0 +1,44 @@
+---
+title: How Entl became powdermonkey's read layer
+description: We deleted a hand-built GitHub sync engine and replaced every git/forge read with Entl — in-process, local-first, one DuckDB.
+date: 2026-06-30
+author: Zack Maril
+---
+
+[powdermonkey](https://github.com/zmaril/powdermonkey) is a supervisor for cloud coding
+agents. It needs to know a lot about a repo's forge state: which PRs its workers opened,
+whether they conflict, whether CI is green, what the latest status comment says. It had
+grown a hand-built sync engine for all of that — a `gh api graphql` poll loop, plus
+shell-outs to `git` for branch checks, commit-trailer scans, and remote branch discovery.
+
+We replaced the whole thing with **Entl**.
+
+## The shape of the change
+
+Entl runs *in-process* inside powdermonkey's Bun runtime (via native bindings), keeping a
+local DuckDB current with a `watch` loop. From there, every read powdermonkey used to make
+became a query or a local git operation:
+
+- The **PR poll** → `gh_pull_requests` + `gh_comments`.
+- The **review pane** → PR diffs computed locally from git objects (no forge round-trip),
+  plus inline comments from `gh_review_comments`.
+- The **operational git reads** — does this branch exist, what's on `main`, which branch did
+  a worker push — → Entl, which fetches first so the answer is fresh.
+
+The only `git`/`gh` calls left are **writes** (pull, worktrees, posting comments) and a
+single bootstrap lookup. On the happy path, every read goes through Entl.
+
+## Why local-first mattered
+
+The review pane was the surprise. powdermonkey had been fetching unified diffs from the
+forge's REST API. Entl computes them from the git objects it already has — using the same
+tree-diff machinery it uses for everything else, plus a unified-diff printer. To make it
+work for *every* PR (including merged ones whose branches were deleted), Entl now fetches
+`refs/pull/*/head` by default. No more round-trips, and it works offline.
+
+## The lesson
+
+The repos these tools operate on aren't big. Once the data is local and in one place, "sync
+engine" stops being a thing you build and starts being a query you write. That's the whole
+idea behind Entl — streaming, OLTP, and OLAP at local scale — and powdermonkey is the first
+proof.

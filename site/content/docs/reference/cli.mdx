@@ -1,0 +1,119 @@
+---
+title: CLI
+description: The Entl command-line interface — generated from its --help output.
+---
+
+{/* AUTO-GENERATED from `entl --help` by scripts/gen-reference.ts — run `bun run gen`. Do not edit by hand. */}
+
+# CLI
+
+```text
+git + GitHub data in DuckDB
+
+Usage: entl <COMMAND>
+
+Commands:
+  init      Create/open the DB and apply migrations
+  load      Load git history + GitHub data into the DB (one-way, incremental)
+  watch     Run continuously: fetch + load git on ref changes + GitHub on a timer
+  analysis  Run an analysis over already-loaded data
+  query     Run a SQL query and print the result
+  tables    List the tables in the DB
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
+```
+
+## Commands
+
+### `entl init`
+
+```text
+Create/open the DB and apply migrations
+
+Usage: entl init [DB]
+
+Arguments:
+  [DB]  [default: entl.duckdb]
+
+Options:
+  -h, --help  Print help
+```
+
+### `entl load`
+
+```text
+Load git history + GitHub data into the DB (one-way, incremental)
+
+Usage: entl load [OPTIONS] [PATH]
+
+Arguments:
+  [PATH]  [default: .]
+
+Options:
+      --db <DB>      [default: entl.duckdb]
+      --git-only     Only load git (skip GitHub)
+      --github-only  Only load GitHub (skip git)
+  -h, --help         Print help
+```
+
+### `entl watch`
+
+```text
+Run continuously: fetch + load git on ref changes + GitHub on a timer
+
+Usage: entl watch [OPTIONS] [PATH]
+
+Arguments:
+  [PATH]  [default: .]
+
+Options:
+      --db <DB>              [default: entl.duckdb]
+      --interval <INTERVAL>  GitHub poll interval in seconds [default: 60]
+  -h, --help                 Print help
+```
+
+### `entl analysis`
+
+```text
+Run an analysis over already-loaded data
+
+Usage: entl analysis <COMMAND>
+
+Commands:
+  merge-conflicts  Replay every merge to find conflict hot zones (needs `load` first)
+  help             Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help
+```
+
+### `entl query`
+
+```text
+Run a SQL query and print the result
+
+Usage: entl query [OPTIONS] <SQL>
+
+Arguments:
+  <SQL>  
+
+Options:
+      --db <DB>  [default: entl.duckdb]
+  -h, --help     Print help
+```
+
+### `entl tables`
+
+```text
+List the tables in the DB
+
+Usage: entl tables [OPTIONS]
+
+Options:
+      --db <DB>  [default: entl.duckdb]
+  -h, --help     Print help
+```
+

@@ -1,0 +1,26 @@
+{
+  "name": "@entl/node",
+  "version": "0.0.0",
+  "description": "The entl engine (git + GitHub → DuckDB) as an in-process Node/Bun native addon.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "napi": {
+    "name": "entl"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "*.node"
+  ],
+  "scripts": {
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "gen": "bun run gen-tables.ts",
+    "test": "bun test coverage.test.ts"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.3",
+    "@napi-rs/cli": "^2.18.4",
+    "drizzle-orm": "^0.45.2"
+  }
+}

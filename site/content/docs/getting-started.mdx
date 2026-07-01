@@ -1,0 +1,122 @@
+---
+title: Getting started
+description: Install Entl, load a repo, and run your first query — in your language of choice.
+---
+
+Entl pulls a repo's git history and forge activity into a local [DuckDB](https://duckdb.org), then lets you query it however you like. Pick your language in any tab below — the choice sticks across **every** example on the site.
+
+## Install
+
+<Tabs groupId="lang" persist items={['CLI', 'Node', 'Rust', 'SQL']}>
+  <Tab value="CLI">
+    ```sh
+    cargo install entl-cli
+    ```
+  </Tab>
+  <Tab value="Node">
+    ```sh
+    bun add @entl/node
+    # or: npm install @entl/node
+    ```
+  </Tab>
+  <Tab value="Rust">
+    ```sh
+    cargo add entl-core
+    ```
+  </Tab>
+  <Tab value="SQL">
+    Querying needs only a DuckDB client against a database Entl has written:
+
+    ```sh
+    brew install duckdb   # or see duckdb.org/docs/installation
+    ```
+  </Tab>
+</Tabs>
+
+## Load a repo
+
+Entl reads from a normal local clone and writes everything into one `.duckdb` file. This is one-way and incremental — run it again to pick up new commits and activity.
+
+<Tabs groupId="lang" persist items={['CLI', 'Node', 'Rust', 'SQL']}>
+  <Tab value="CLI">
+    ```sh
+    entl load ./my-repo --db data.duckdb
+    ```
+  </Tab>
+  <Tab value="Node">
+    ```ts
+    import { Entl } from "@entl/node";
+
+    const entl = new Entl("data.duckdb"); // opens + migrates
+    await entl.loadGit("./my-repo");      // commits, refs, diffs, trees
+    await entl.loadGithub("./my-repo");   // PRs, reviews, CI, events
+    ```
+  </Tab>
+  <Tab value="Rust">
+    ```rust
+    use std::sync::atomic::AtomicU64;
+    use entl_core::{Db, ingest_git, ingest_github};
+
+    let db = Db::open("data.duckdb")?;
+    db.migrate()?;
+    let counter = AtomicU64::new(0);
+    ingest_git(&db, "./my-repo", &counter)?;
+    ingest_github(&db, "./my-repo")?;
+    ```
+  </Tab>
+  <Tab value="SQL">
+    Loading is done by the engine (CLI / Node / Rust). Once a database exists, point any
+    DuckDB client at it:
+
+    ```sh
+    duckdb data.duckdb
+    ```
+  </Tab>
+</Tabs>
+
+## Query it
+
+Everything lands in plain tables. Forge tables are namespaced `gh_*`; git-generic tables (`commits`, `refs`, `file_changes`, …) are bare.
+
+<Tabs groupId="lang" persist items={['CLI', 'Node', 'Rust', 'SQL']}>
+  <Tab value="CLI">
+    ```sh
+    duckdb data.duckdb \
+      "SELECT number, title FROM gh_pull_requests WHERE state = 'OPEN' ORDER BY updated_at DESC"
+    ```
+  </Tab>
+  <Tab value="Node">
+    ```ts
+    // Returns a JSON string of rows; runs off the main thread.
+    const rows = JSON.parse(
+      await entl.query(
+        "SELECT number, title FROM gh_pull_requests WHERE state = 'OPEN'",
+      ),
+    );
+    console.log(rows);
+    ```
+  </Tab>
+  <Tab value="Rust">
+    ```rust
+    let mut stmt = db.conn.prepare(
+        "SELECT number, title FROM gh_pull_requests WHERE state = 'OPEN'",
+    )?;
+    let rows = stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?;
+    for row in rows { println!("{:?}", row?); }
+    ```
+  </Tab>
+  <Tab value="SQL">
+    ```sql
+    SELECT number, title
+    FROM gh_pull_requests
+    WHERE state = 'OPEN'
+    ORDER BY updated_at DESC;
+    ```
+  </Tab>
+</Tabs>
+
+<Callout>
+These snippets are the living examples for the docs skeleton — the exact package names and
+flags are settling as the public release lands. The shapes (load → query, one DuckDB file)
+are stable.
+</Callout>

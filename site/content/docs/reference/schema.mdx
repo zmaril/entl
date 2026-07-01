@@ -1,0 +1,370 @@
+---
+title: Schema
+description: Every table Entl writes — generated from the migrations.
+---
+
+{/* AUTO-GENERATED from crates/entl-core/migrations/*.sql by scripts/gen-reference.ts — run `bun run gen`. Do not edit by hand. */}
+
+# Schema
+
+Entl writes one DuckDB. **git-generic** tables are bare (so a future forge reuses them);
+**GitHub** tables are namespaced `gh_*`. 28 tables in total.
+
+<Callout>
+Generated from the SQL migrations. Diffs and blob contents are **not** stored — they're
+computed on demand (`diffCommits`, `fileAt`; see the [Node API](/docs/reference/node-api)).
+</Callout>
+
+## git
+
+### `blobs`
+
+| Column | Type | |
+|---|---|---|
+| `oid` | `blob` | **PK** |
+| `repo_id` | `text` | not null |
+| `size` | `bigint` | not null |
+| `is_binary` | `boolean` | not null, default `false` |
+| `content_text` | `text` |  |
+| `content_sha` | `text` |  |
+
+### `commit_parents`
+
+| Column | Type | |
+|---|---|---|
+| `commit_oid` | `blob` | **PK** |
+| `parent_oid` | `blob` | not null |
+| `idx` | `integer` | **PK** |
+
+### `commits`
+
+One row per commit, walked from every ref. Author and committer time/identity are kept separate; `summary` is the first line of `message`.
+
+| Column | Type | Description | |
+|---|---|---|---|
+| `oid` | `blob` | commit SHA (binary; hex via `lower(hex(oid))`) | **PK** |
+| `repo_id` | `text` |  | not null |
+| `tree_oid` | `blob` | root tree this commit points at | not null |
+| `message` | `text` | full commit message | not null |
+| `summary` | `text` | first line of the message | not null |
+| `author_name` | `text` |  |  |
+| `author_email` | `text` |  |  |
+| `author_when` | `timestamp` |  |  |
+| `author_tz` | `text` |  |  |
+| `committer_name` | `text` |  |  |
+| `committer_email` | `text` |  |  |
+| `committer_when` | `timestamp` |  |  |
+| `committer_tz` | `text` |  |  |
+| `parent_count` | `integer` |  | not null, default `0` |
+| `is_merge` | `boolean` |  | not null, default `false` |
+| `gpg_signed` | `boolean` |  | not null, default `false` |
+
+### `conflicts`
+
+Merge-conflict hot zones (the north star). Populated by the `entl conflicts` pass: replay every historical 2-parent merge with gix's 3-way tree merge and record the paths that conflicted. `unresolved` = git would have required a human to resolve it (text markers or structural failure), vs auto-resolved.
+
+| Column | Type | |
+|---|---|---|
+| `repo_id` | `text` | **PK** |
+| `merge_oid` | `text` | **PK** |
+| `path` | `text` | **PK** |
+| `unresolved` | `boolean` | not null |
+
+### `file_changes`
+
+| Column | Type | |
+|---|---|---|
+| `commit_oid` | `blob` | **PK** |
+| `path` | `text` | **PK** |
+| `old_path` | `text` |  |
+| `status` | `text` | not null |
+| `additions` | `integer` |  |
+| `deletions` | `integer` |  |
+| `blob_oid` | `blob` |  |
+| `old_blob_oid` | `blob` |  |
+
+### `refs`
+
+Branches, tags, remote-tracking refs, and HEAD — one row each.
+
+| Column | Type | Description | |
+|---|---|---|---|
+| `repo_id` | `text` |  | **PK** |
+| `name` | `text` | short ref name, e.g. `main` or `origin/main` | **PK** |
+| `kind` | `text` | branch \| tag \| remote \| head | not null |
+| `target_oid` | `blob` | commit the ref points at | not null |
+| `is_symbolic` | `boolean` |  | not null, default `false` |
+| `upstream` | `text` |  |  |
+
+### `repos`
+
+| Column | Type | |
+|---|---|---|
+| `id` | `text` | **PK** |
+| `path` | `text` | not null |
+| `remote_url` | `text` |  |
+| `host` | `text` |  |
+| `owner` | `text` |  |
+| `name` | `text` |  |
+| `default_branch` | `text` |  |
+| `first_synced_at` | `timestamp` |  |
+| `last_synced_at` | `timestamp` |  |
+
+### `sync_state`
+
+| Column | Type | |
+|---|---|---|
+| `resource` | `text` | **PK** |
+| `cursor` | `text` |  |
+| `etag` | `text` |  |
+| `watermark` | `timestamp` |  |
+| `last_synced_at` | `timestamp` |  |
+| `last_error` | `text` |  |
+
+### `tree_entries`
+
+| Column | Type | |
+|---|---|---|
+| `tree_oid` | `blob` | **PK** |
+| `name` | `text` | **PK** |
+| `path` | `text` | not null |
+| `mode` | `text` | not null |
+| `entry_type` | `text` | not null |
+| `child_oid` | `blob` | not null |
+
+### `trees`
+
+| Column | Type | |
+|---|---|---|
+| `oid` | `blob` | **PK** |
+| `repo_id` | `text` | not null |
+
+
+## GitHub
+
+### `gh_assignees`
+
+| Column | Type | |
+|---|---|---|
+| `repo_id` | `text` | **PK** |
+| `subject_type` | `text` | **PK** |
+| `subject_number` | `integer` | **PK** |
+| `user_id` | `bigint` | **PK** |
+
+### `gh_check_runs`
+
+| Column | Type | |
+|---|---|---|
+| `id` | `bigint` | **PK** |
+| `repo_id` | `text` | not null |
+| `commit_oid` | `blob` |  |
+| `name` | `text` |  |
+| `status` | `text` |  |
+| `conclusion` | `text` |  |
+| `started_at` | `timestamp` |  |
+| `completed_at` | `timestamp` |  |
+
+### `gh_comments`
+
+| Column | Type | |
+|---|---|---|
+| `id` | `bigint` | **PK** |
+| `repo_id` | `text` | not null |
+| `subject_type` | `text` | not null |
+| `subject_number` | `integer` | not null |
+| `author_id` | `bigint` |  |
+| `body` | `text` |  |
+| `created_at` | `timestamp` |  |
+
+### `gh_commit_statuses`
+
+| Column | Type | |
+|---|---|---|
+| `id` | `bigint` | **PK** |
+| `repo_id` | `text` | not null |
+| `commit_oid` | `blob` | not null |
+| `context` | `text` |  |
+| `state` | `text` |  |
+| `description` | `text` |  |
+| `target_url` | `text` |  |
+| `created_at` | `timestamp` |  |
+
+### `gh_events`
+
+Raw GitHub event stream (the /repos/\{o\}/\{r\}/events feed). Entl polls this as the top-level "did anything happen?" signal AND stores every event as a queryable activity log. Note: GitHub's feed is capped (~300 events / 90 days), so this is complete *going forward* from when polling starts, not a full historical backfill. `payload` is the event's type-specific JSON, stored as text (query via json_extract(payload, '$.…') / payload::JSON).
+
+| Column | Type | |
+|---|---|---|
+| `repo_id` | `text` | **PK** |
+| `id` | `text` | **PK** |
+| `type` | `text` |  |
+| `actor_id` | `bigint` |  |
+| `actor_login` | `text` |  |
+| `created_at` | `timestamp` |  |
+| `payload` | `text` |  |
+
+### `gh_issues`
+
+| Column | Type | |
+|---|---|---|
+| `repo_id` | `text` | **PK** |
+| `number` | `integer` | **PK** |
+| `title` | `text` |  |
+| `body` | `text` |  |
+| `state` | `text` | not null |
+| `author_id` | `bigint` |  |
+| `created_at` | `timestamp` |  |
+| `updated_at` | `timestamp` |  |
+| `closed_at` | `timestamp` |  |
+
+### `gh_jobs`
+
+| Column | Type | |
+|---|---|---|
+| `id` | `bigint` | **PK** |
+| `run_id` | `bigint` | not null |
+| `name` | `text` |  |
+| `status` | `text` |  |
+| `conclusion` | `text` |  |
+| `started_at` | `timestamp` |  |
+| `completed_at` | `timestamp` |  |
+| `runner_name` | `text` |  |
+
+### `gh_labeled`
+
+| Column | Type | |
+|---|---|---|
+| `repo_id` | `text` | **PK** |
+| `subject_type` | `text` | **PK** |
+| `subject_number` | `integer` | **PK** |
+| `label_name` | `text` | **PK** |
+
+### `gh_labels`
+
+| Column | Type | |
+|---|---|---|
+| `repo_id` | `text` | **PK** |
+| `name` | `text` | **PK** |
+| `color` | `text` |  |
+| `description` | `text` |  |
+
+### `gh_pr_commits`
+
+| Column | Type | |
+|---|---|---|
+| `repo_id` | `text` | **PK** |
+| `pr_number` | `integer` | **PK** |
+| `commit_oid` | `blob` | **PK** |
+
+### `gh_pr_reviews`
+
+| Column | Type | |
+|---|---|---|
+| `id` | `bigint` | **PK** |
+| `repo_id` | `text` | not null |
+| `pr_number` | `integer` | not null |
+| `reviewer_id` | `bigint` |  |
+| `state` | `text` |  |
+| `submitted_at` | `timestamp` |  |
+| `body` | `text` |  |
+
+### `gh_pull_requests`
+
+Pull requests and their lifecycle. `mergeable` + `checks` are the live conflict and CI signals; `head_oid`/`base_oid` drive on-demand `base...head` PR diffs.
+
+| Column | Type | Description | |
+|---|---|---|---|
+| `repo_id` | `text` |  | **PK** |
+| `number` | `integer` | PR number (unique per repo) | **PK** |
+| `title` | `text` |  |  |
+| `body` | `text` |  |  |
+| `state` | `text` | OPEN \| CLOSED \| MERGED | not null |
+| `author_id` | `bigint` |  |  |
+| `created_at` | `timestamp` |  |  |
+| `updated_at` | `timestamp` |  |  |
+| `closed_at` | `timestamp` |  |  |
+| `merged_at` | `timestamp` |  |  |
+| `merge_commit_oid` | `blob` |  |  |
+| `head_ref` | `text` |  |  |
+| `base_ref` | `text` |  |  |
+| `additions` | `integer` |  |  |
+| `deletions` | `integer` |  |  |
+| `changed_files` | `integer` |  |  |
+| `is_draft` | `boolean` |  | not null, default `false` |
+| `mergeable` | `text` | MERGEABLE \| CONFLICTING \| UNKNOWN (GitHub computes it lazily) |  |
+| `checks` | `text` | head commit CI rollup: SUCCESS \| FAILURE \| PENDING \| … |  |
+| `head_oid` | `blob` | PR head commit (for base...head diffs) |  |
+| `base_oid` | `blob` | base branch tip at fetch time |  |
+
+### `gh_requested_reviewers`
+
+| Column | Type | |
+|---|---|---|
+| `repo_id` | `text` | **PK** |
+| `pr_number` | `integer` | **PK** |
+| `user_id` | `bigint` | **PK** |
+
+### `gh_review_comments`
+
+| Column | Type | |
+|---|---|---|
+| `id` | `bigint` | **PK** |
+| `repo_id` | `text` | not null |
+| `pr_number` | `integer` | not null |
+| `path` | `text` |  |
+| `line` | `integer` |  |
+| `side` | `text` |  |
+| `commit_oid` | `blob` |  |
+| `author_id` | `bigint` |  |
+| `body` | `text` |  |
+| `created_at` | `timestamp` |  |
+| `in_reply_to` | `bigint` |  |
+
+### `gh_steps`
+
+| Column | Type | |
+|---|---|---|
+| `job_id` | `bigint` | **PK** |
+| `number` | `integer` | **PK** |
+| `name` | `text` |  |
+| `status` | `text` |  |
+| `conclusion` | `text` |  |
+| `started_at` | `timestamp` |  |
+| `completed_at` | `timestamp` |  |
+
+### `gh_users`
+
+| Column | Type | |
+|---|---|---|
+| `id` | `bigint` | **PK** |
+| `login` | `text` | not null |
+| `type` | `text` |  |
+| `name` | `text` |  |
+
+### `gh_workflow_runs`
+
+| Column | Type | |
+|---|---|---|
+| `id` | `bigint` | **PK** |
+| `repo_id` | `text` | not null |
+| `workflow_id` | `bigint` |  |
+| `head_oid` | `blob` |  |
+| `head_branch` | `text` |  |
+| `event` | `text` |  |
+| `status` | `text` |  |
+| `conclusion` | `text` |  |
+| `run_number` | `integer` |  |
+| `run_attempt` | `integer` |  |
+| `created_at` | `timestamp` |  |
+| `updated_at` | `timestamp` |  |
+| `run_started_at` | `timestamp` |  |
+
+### `gh_workflows`
+
+| Column | Type | |
+|---|---|---|
+| `id` | `bigint` | **PK** |
+| `repo_id` | `text` | not null |
+| `name` | `text` |  |
+| `path` | `text` |  |
+| `state` | `text` |  |

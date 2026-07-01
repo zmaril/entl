@@ -1,0 +1,46 @@
+entl — todo
+
+## Event backfill (deferred)
+
+The /events feed is capped at ~300 events / 90 days, so the `events` table is only
+complete going FORWARD from when polling starts. To get history:
+
+[ ] Timeline API backfill (preferred path — works on PRIVATE repos)
+    - GET /repos/{o}/{r}/issues/{n}/timeline  → full, UNCAPPED per-issue/PR history.
+    - Gives the meta-events we can't reconstruct: labeled/unlabeled, assigned,
+      renamed, review_requested, cross-referenced (issue<->PR<->commit graph over
+      time), closed/reopened, merged, head_ref_force_pushed, committed, reviewed.
+    - Only needs READ access (no admin). Works on any readable repo, public or private.
+    - Cost: one paginated request per PR/issue (fan-out). Mitigate:
+        * concurrent fetch (buffer_unordered, like jobs/checks),
+        * reuse the PR/issue list we already iterate,
+        * incremental via the existing watermark — after the one-time backfill,
+          only re-fetch timelines of subjects that changed.
+    - Impl notes: octocrab has no typed timeline method → raw client._get + serde,
+      JSON payload column (heterogeneous events). Store in a `timeline_events` table
+      (or tag rows in `events` with source='timeline'). Set the mockingbird-preview
+      Accept header defensively (GA now, but harmless).
+
+[ ] (cheap, free) Synthesized `activity` view
+    - A SQL view UNION-ing timestamps we already fully backfill: PR opened/merged/
+      closed, review submitted, comment created, commit authored, workflow run.
+    - No API calls. Covers CONTENT activity (not label/assign history, not push/star).
+    - Nice as: activity = real `events` (forward) UNION synthesized (historical).
+
+REJECTED: GH Archive (gharchive.org / BigQuery firehose).
+    - It's the only source for the raw historical firehose (incl. push/star/fork back
+      to 2011) and is DuckDB-readable, BUT it is PUBLIC-repos-only. We want private
+      repo support, so this is out. Use the Timeline API instead.
+
+## Other deferred (from sessions)
+
+[ ] tree-sitter code-analysis pass — the differentiated half. Parse each unique blob
+    → symbols / blob_metrics keyed by blob_oid, joinable across history.
+
+[ ] Webhook listener — only worth it if/when entl runs HOSTED (needs a public HTTPS
+    endpoint + repo admin to register). Irrelevant for private/non-owned repos, which
+    polling already covers. Park until there's a hosted deployment.
+
+[ ] First full GitHub sync of a huge repo is still a one-time slow crawl (bpftrace
+    3424 PRs >10 min) — GraphQL cursors are sequential. Run once in the background;
+    incremental re-syncs are already fast.

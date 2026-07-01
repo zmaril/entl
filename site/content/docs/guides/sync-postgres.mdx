@@ -1,0 +1,51 @@
+---
+title: Sync to Postgres / PGlite
+description: Mirror Entl's tables into Postgres or PGlite to join with app data and drive realtime.
+---
+
+Entl's store is DuckDB, but you often want the data in **Postgres** too — to join it against
+your app's own tables, or to drive realtime UIs off [PGlite](https://pglite.dev)'s `live`
+queries. The `@entl/node` package ships a sink for exactly that.
+
+`syncInto(pg, entl, opts)` mirrors Entl's tables into any Postgres/PGlite database, under an
+`entl` schema so they never collide with your app's own tables.
+
+## Example
+
+```ts
+import { PGlite } from "@electric-sql/pglite";
+import { Entl } from "@entl/node";
+import { syncInto } from "@entl/node/sync";
+
+const entl = new Entl("data.duckdb");
+await entl.loadGit("./my-repo");
+await entl.loadGithub("./my-repo");
+
+const pg = new PGlite("./pgdata");
+const counts = await syncInto(pg, entl);
+// → { gh_pull_requests: 41, commits: 1234, … }  rows mirrored per table
+```
+
+Now `entl.gh_pull_requests`, `entl.commits`, … exist in Postgres and join with your own
+tables — the same [schema](/docs/reference/schema), one `SELECT` away.
+
+## Options
+
+| Option | Default | What |
+|---|---|---|
+| `tables` | all | Which tables to mirror — a typed `EntlTables.*` list |
+| `rename` | — | Override the target table name per Entl table |
+| `schema` | `"entl"` | Target Postgres schema |
+
+## Coverage & realtime
+
+- **Coverage is derived from Entl's own schema** by introspection — so it covers every table
+  by construction and can't silently drift (a coverage test guards it in CI).
+- **BLOB** columns (git oids) are projected to **hex text** on the Postgres side.
+- Once rows land in PGlite, its **`live`** extension turns inserts/updates into realtime —
+  no extra streaming API to build.
+
+<Callout>
+Import paths and package names are settling as the public release lands; the sink's shape
+(`syncInto(pg, entl, opts)` → per-table row counts) is stable.
+</Callout>

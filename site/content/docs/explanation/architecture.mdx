@@ -1,0 +1,53 @@
+---
+title: How Entl works
+description: The design behind Entl — one local engine for git + forge data, and why it's shaped that way.
+---
+
+This page is about *understanding* Entl — the shape of the thing and the reasoning behind
+it. For steps, see the [tutorial](/docs/getting-started); for tasks, the
+[how-to guides](/docs/guides/querying).
+
+## One engine, one DuckDB
+
+Entl reads a repo's **git history** (commits, refs, trees, file changes) and its **forge
+activity** (PRs, reviews, comments, CI, events) and writes both into a single local
+[DuckDB](https://duckdb.org) file. That's the whole model: ingest once, then it's just
+tables.
+
+The bet is that **the repos these tools operate on aren't big.** A local columnar database
+can hold all of it and answer analytical questions (OLAP), point lookups (OLTP), and feed
+realtime views (streaming) — without a server, and without anything leaving your machine.
+
+## Three faces, one core
+
+The engine — the `entl-core` Rust crate — is synchronous and does the real work. Three thin
+layers expose it: the **CLI**, the **Rust crate**, and the **Node/Bun bindings** (which run
+in-process, sharing the one DuckDB connection so there's no second process fighting over a
+file lock). Async is a per-binding concern; the core stays blocking and simple.
+
+## Stored vs. computed
+
+Commits, refs, PRs, and per-commit file changes are **materialized**. But **diffs and file
+contents are computed on demand** from the git objects — `diffCommits` runs a tree-diff and
+unified-diff locally; `fileAt` reads a blob at a commit. No point storing every PR's patch
+when git has the objects and the diff is cheap. This is why Entl can show a PR's diff
+offline.
+
+## Keeping current
+
+`watch` is the loop: every interval it `git fetch`es (including `refs/pull/*/head`, so every
+PR's commits are local), incrementally loads anything new, and calls back. Pair that callback
+with the [PGlite sink](/docs/guides/sync-postgres) and PGlite's `live` extension turns each
+sync into a realtime update.
+
+## Forge, not just GitHub
+
+Forge tables are namespaced `gh_*`; git-generic tables (`commits`, `refs`, `file_changes`, …)
+are bare. The split is deliberate: the git tables describe *any* repository, so a future
+forge (GitLab, Gitea, …) reuses them and only adds its own `gl_*` / `gt_*` surface.
+
+## Entl as a read layer
+
+Put together, this is what lets Entl become the **single read layer** for a tool. Instead of
+each feature making its own API calls and `git` shell-outs, everything reads from Entl: the
+data is local, consistent, and joinable.

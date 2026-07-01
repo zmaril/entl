@@ -1,0 +1,19 @@
+[package]
+name = "entl-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "entl CLI — git + GitHub data in DuckDB."
+
+[[bin]]
+name = "entl"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.103"
+clap = { version = "4.6.1", features = ["derive"] }
+crossbeam-channel = "0.5.15"
+entl-core = { path = "../entl-core" }
+indicatif = "0.18.4"
+mimalloc = "0.1.52"
+notify = "8.2.0"

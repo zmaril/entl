@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = ["crates/entl-core", "crates/entl-cli", "crates/entl-node"]
+# entl-node (the napi addon) builds via @napi-rs/cli, not plain `cargo build`,
+# so keep it out of the default set to keep CLI/core builds fast.
+default-members = ["crates/entl-core", "crates/entl-cli"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+license = "MIT"
+
+[profile.release]
+lto = "thin"
+
+# release + debug symbols, for profiling (samply/flamegraph). Build with
+# `cargo build --profile profiling`; binary at target/profiling/entl.
+[profile.profiling]
+inherits = "release"
+debug = true
+strip = false
