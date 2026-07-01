@@ -1,7 +1,7 @@
 # Entl
 
 <p align="center">
-  <img src="site/public/duckling.png" alt="Entl — a duckling in a Tyrolean hat" width="240">
+  <img src="assets/duckling.jpg" alt="Entl — a duckling in a Tyrolean hat" width="280">
   <br>
   <em><sub>Entl — Bavarian/Austrian for "little duck".</sub></em>
 </p>
@@ -48,4 +48,4 @@ Entl is early and moving fast. If something's broken, missing, or you've got a g
 
 Code is MIT.
 
-The duckling mascot (`site/public/duckling.png`) was generated with ChatGPT.
+The duckling art (`assets/duckling.jpg`) was generated with Midjourney.
