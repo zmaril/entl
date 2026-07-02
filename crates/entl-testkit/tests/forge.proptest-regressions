@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 4d4a1b09647477ebbc310cf5584ab3fb5e2faa849c0065e4ee5094595bc8a7c9 # shrinks to gitw = GitWorld { commits: [GenCommit { parents: [], tree: {}, author: GenSig { name: "Alice", email: "alice@example.com", time_secs: 1600000001, tz: "+0000" }, committer: GenSig { name: "Alice", email: "alice@example.com", time_secs: 1600000001, tz: "+0000" }, message: "_\n" }], refs: [GenRef { name: "refs/heads/main", target: 0 }] }, forge = ForgeWorld { owner: "acme", name: "widget", users: [GhUser { id: 1, login: "u0", typ: "User" }], labels: [GhLabel { name: "lbl0", color: Some("000000"), description: Some("label 0") }, GhLabel { name: "lbl1", color: Some("111111"), description: Some("label 1") }, GhLabel { name: "lbl2", color: Some("222222"), description: Some("label 2") }], pulls: [], issues: [], events: [] }

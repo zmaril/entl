@@ -40,7 +40,7 @@ impl Db {
     fn open(path: &str) -> Result<Self>;
     fn from_conn(conn: Connection) -> Self;
     fn migrate(&self) -> Result<()>;
-    fn applied_migrations(&self) -> Result<i64>;
+    fn table_count(&self) -> Result<i64>;
     fn query_table(&self, sql: &str) -> Result<String>;
 }
 ```
@@ -85,6 +85,230 @@ struct GitIngest {
     pub new_commits: usize,
     pub file_changes: usize,
     pub refs: usize,
+}
+```
+
+### `ObjIngest`
+
+```rust
+struct ObjIngest {
+    pub trees: usize,
+    pub tree_entries: usize,
+    pub blobs: usize,
+}
+```
+
+### `SnapCommit`
+
+A commit ready for fast-import: full tree (path, bytes, octal mode) + parents (by prior index)
++ author/committer `(name, email, unix_secs, tz)` + message.
+
+```rust
+struct SnapCommit {
+    pub parents: Vec<usize>,
+    pub tree: Vec<(String, Vec<u8>, String)>,
+    pub author: (String, String, i64, String),
+    pub committer: (String, String, i64, String),
+    pub message: String,
+}
+```
+
+### `SnapRef`
+
+A ref to set after import: full name → commit index.
+
+```rust
+struct SnapRef {
+    pub name: String,
+    pub target: usize,
+}
+```
+
+### `PullOpts`
+
+What to pull in a [`pull_into`] cycle.
+
+```rust
+struct PullOpts {
+    /// Also pull GitHub (events/PRs/issues/Actions). Requires a token; see the github module.
+    pub github: bool,
+    /// Also ingest the object graph (trees/tree_entries/blobs + raw content) — the full-fidelity
+    /// mirror needed to `rebuild` a repo. Heavy for large repos; off by default.
+    pub objects: bool,
+}
+```
+
+### `SinkOutcome`
+
+The result of a [`pull_into`] cycle: what git + forge produced, and how many rows the sink
+applied.
+
+```rust
+struct SinkOutcome {
+    pub git: GitIngest,
+    /// `None` when `PullOpts::github` was false.
+    pub github: Option<GithubIngest>,
+    /// Total rows the sink applied across all change batches.
+    pub rows: u64,
+}
+```
+
+### `SinkTarget`
+
+A built-in sink target. The source-of-truth enum; each language binding declares its own
+native enum (napi / PyO3) and maps into this one, so a new target is added here once.
+
+```rust
+enum SinkTarget {
+    /// A SQLite database file (upsert by primary key; see [`SqliteSink`]).
+    Sqlite,
+    /// A directory of append-only per-table `.jsonl` change logs (see [`JsonlSink`]).
+    Jsonl,
+    /// A Postgres database (upsert by primary key, into a target schema; see [`PostgresSink`]).
+    Postgres,
+}
+```
+
+### `JsonlSink`
+
+Append every change batch's rows to `<dir>/<table>.jsonl` — a change log (one
+JSON object per row, tagged with `_op`). Append-only; a durable materialized
+view would replay + dedup by key (a follow-up).
+
+```rust
+struct JsonlSink {
+    dir: PathBuf,
+    select: SinkSelect,
+    files: HashMap<String, BufWriter<File>>,
+}
+```
+
+### `PostgresSink`
+
+Write the change stream into a **Postgres** database, upserting by primary key.
+
+Tables come from hand-written migrations (`migrations/postgres/`), applied on open into the
+target `schema` (default `entl`, so entl's tables never collide with the app's) and tracked
+in `entl_migrations`. Each batch upserts on the table's PK; `Replace` clears once per run.
+Object-ids land as `text` (hex), timestamps as `timestamptz`. TLS follows the URL's `sslmode`
+(libpq semantics): `disable` = plaintext; `prefer` (default)/`require`/`allow` = encrypt
+without verifying the cert (works with managed Postgres' private-CA certs out of the box);
+`verify-ca`/`verify-full` = encrypt *and* verify the server certificate.
+
+```rust
+struct PostgresSink {
+    client: Client,
+    schema: String,
+    select: SinkSelect,
+    /// Cached PK columns per *target* table (empty = no PK → plain insert).
+    pk: HashMap<String, Vec<String>>,
+    cleared: HashSet<String>,
+}
+```
+
+### `SinkSelect`
+
+Per-sink table selection: which tables a sink writes, and how it names/places them.
+The pull is the upper bound; a sink narrows from there (notes/design/multidb.md
+§"Selecting tables"). All fields optional — the default writes every pulled table as-is.
+
+```rust
+struct SinkSelect {
+    /// Include-list of source (canonical) table names. `None` = all.
+    pub tables: Option<Vec<String>>,
+    /// Source table names to skip.
+    pub exclude: Vec<String>,
+    /// Rename `source -> target` table name at the sink.
+    pub rename: Vec<(String, String)>,
+    /// Target schema (Postgres only; default `entl`). Ignored by other sinks.
+    pub schema: Option<String>,
+}
+```
+
+### `SqliteSink`
+
+Write the change stream into a **SQLite** file, upserting by primary key.
+
+Tables come from hand-written migrations (`migrations/sqlite/`), applied on
+open and tracked in `entl_migrations`. Each batch upserts on the table's PK
+(`INSERT … ON CONFLICT … DO UPDATE`), so re-runs are idempotent; `Replace`
+clears the table once per run first. Object-ids + timestamps land as TEXT
+(hex / RFC3339). A table with no migration falls back to a typeless
+auto-create + plain insert.
+
+```rust
+struct SqliteSink {
+    conn: rusqlite::Connection,
+    select: SinkSelect,
+    /// Cached PK columns per *target* table (empty = no PK → plain insert).
+    pk: HashMap<String, Vec<String>>,
+    cleared: HashSet<String>,
+}
+```
+
+### `ChangeBatch`
+
+One unit of the change stream: rows for a single table, carried as Arrow.
+
+```rust
+struct ChangeBatch {
+    /// The table these rows belong to (`commits`, `file_changes`, `refs`, …).
+    pub table: String,
+    /// How the rows changed.
+    pub op: ChangeOp,
+    /// The rows, columnar. Arrow so it crosses FFI cheaply and every target speaks it.
+    pub batch: RecordBatch,
+}
+```
+
+### `ChangeOp`
+
+What happened to the rows in a batch.
+
+```rust
+enum ChangeOp {
+    Insert,
+    Update,
+    /// Insert-or-update by natural key — the forge resources (upsert on re-fetch).
+    Upsert,
+    Delete,
+    /// The table's rows for this repo were wholesale replaced (e.g. `refs`).
+    Replace,
+}
+```
+
+### `ChangeStream`
+
+The consumer side: drain change batches with a blocking, batched poll.
+
+```rust
+struct ChangeStream {
+    rx: Receiver<ChangeBatch>,
+}
+```
+
+### `ChangeSink`
+
+The producer side: the engine emits change batches here.
+
+```rust
+struct ChangeSink {
+    tx: Sender<ChangeBatch>,
+}
+```
+
+### `Poll`
+
+The result of a `poll`.
+
+```rust
+enum Poll {
+    /// A batch of changes.
+    Batch(ChangeBatch),
+    /// Timed out with nothing ready — the producer is still alive.
+    Idle,
+    /// The producer is gone and the buffer is drained — the stream is over.
+    Closed,
 }
 ```
 
@@ -174,10 +398,194 @@ Ingest GitHub data for the repo at `path` into `db`.
 fn ingest_github(db: &Db, path: &str) -> Result<GithubIngest>
 ```
 
+### `ingest_github_streamed`
+
+Ingest GitHub data, teeing the rows that changed this cycle into `sink` as
+Arrow change batches (notes/design/engine.md, "The change stream").
+
+Emitted post-hoc from the store (no threading through the async sync): the
+top-level resources — `gh_pull_requests`/`gh_issues` (upsert, by `updated_at`
+watermark), `gh_events` (by `created_at`; the `id` is text, not orderable),
+`gh_workflow_runs`/`gh_check_runs` (bounded, cleared+refetched → replace) —
+plus the sub-resources of the PRs/issues that changed (reviews, commits,
+comments, labeled, review-comments, requested-reviewers) and the
+`gh_users`/`gh_labels` dims. Follow-ups: the Actions children
+(`gh_jobs`/`gh_steps`/…) and per-parent *delete* of removed sub-rows.
+
+```rust
+fn ingest_github_streamed(
+    db: &Db,
+    path: &str,
+    sink: Option<&ChangeSink>,
+) -> Result<GithubIngest>
+```
+
 ### `ingest_git`
 
-Ingest git history. `counter` is incremented per commit for live progress.
+Ingest git history (no change stream) — see [`ingest_git_streamed`].
 
 ```rust
 fn ingest_git(db: &Db, path: &str, counter: &AtomicU64) -> Result<GitIngest>
+```
+
+### `ingest_git_streamed`
+
+Ingest git history, teeing the new rows into `sink` as Arrow change batches
+(notes/design/engine.md, "The change stream"). `counter` is incremented per
+commit for live progress.
+
+```rust
+fn ingest_git_streamed(
+    db: &Db,
+    path: &str,
+    counter: &AtomicU64,
+    sink: Option<&ChangeSink>,
+) -> Result<GitIngest>
+```
+
+### `ingest_git_objects`
+
+Ingest the object graph (trees/tree_entries/blobs) reachable from the commits already in `db`.
+
+```rust
+fn ingest_git_objects(db: &Db, path: &str, sink: Option<&ChangeSink>) -> Result<ObjIngest>
+```
+
+### `extract_duckdb`
+
+Canonical snapshot of `tables` from a DuckDB connection (the reference form, S0). Missing
+tables are skipped.
+
+```rust
+fn extract_duckdb(conn: &duckdb::Connection, tables: &[&str]) -> Result<Snapshot>
+```
+
+### `extract_json`
+
+Extract a canonical snapshot from any store and serialize it to deterministic JSON — the shared
+read surface the language bindings expose (`entl.extract`). `source` is
+`duckdb` | `sqlite` | `jsonl` | `postgres`; `schema` applies to Postgres (default `entl`).
+
+```rust
+fn extract_json(source: &str, dest: &str, tables: &[String], schema: Option<&str>) -> Result<String>
+```
+
+### `extract_jsonl`
+
+Canonical snapshot from a JSONL sink directory. Each `<table>.jsonl` is the op-tagged change
+log; for a single fresh pull the final state is just the rows with `_op` stripped.
+
+```rust
+fn extract_jsonl(dir: &str, tables: &[&str]) -> Result<Snapshot>
+```
+
+### `extract_postgres`
+
+Canonical snapshot from a Postgres schema. Typed reads → the same canonical form.
+
+```rust
+fn extract_postgres(url: &str, schema: &str, tables: &[&str]) -> Result<Snapshot>
+```
+
+### `extract_sqlite`
+
+Canonical snapshot from a SQLite file. `bool_cols` (from [`bool_columns`]) tells us which
+integer columns are really booleans.
+
+```rust
+fn extract_sqlite(
+    path: &str,
+    tables: &[&str],
+    bool_cols: &HashSet<(String, String)>,
+) -> Result<Snapshot>
+```
+
+### `fast_import_stream`
+
+Build the fast-import command stream. Commit `i` gets mark `i+1`.
+
+```rust
+fn fast_import_stream(commits: &[SnapCommit], refs: &[SnapRef]) -> Vec<u8>
+```
+
+### `git`
+
+Run a git command in `repo`, erroring on non-zero exit; returns stdout.
+
+```rust
+fn git(repo: &Path, args: &[&str]) -> Result<String>
+```
+
+### `import`
+
+`git init` + `fast-import` the commits/refs into `repo`, returning each commit's OID (hex) by
+index. HEAD is pointed at the first `refs/heads/*` ref so the repo is checkout-shaped.
+
+```rust
+fn import(repo: &Path, commits: &[SnapCommit], refs: &[SnapRef]) -> Result<Vec<String>>
+```
+
+### `build_sink`
+
+Build a boxed sink for `target`. `path` is the SQLite file, the JSONL directory, or the
+Postgres connection URL — required for all. `select` narrows the tables written (and, for
+Postgres, the target schema).
+
+```rust
+fn build_sink(target: SinkTarget, path: Option<&str>, select: SinkSelect) -> Result<Box<dyn Sink + Send>>
+```
+
+### `pull_into`
+
+Pull `repo` into both `db` (the streamed ingest always writes DuckDB) and `sink`.
+
+A consumer thread drains the change stream into `sink` while this thread runs the ingest.
+Git is required; GitHub is attempted when `opts.github` and its error propagates (same
+contract as loading git + github separately). `db` may be an in-memory DuckDB if the caller
+only wants the target sink.
+
+```rust
+fn pull_into(db: &Db, repo: &str, sink: Box<dyn Sink + Send>, opts: PullOpts) -> Result<SinkOutcome>
+```
+
+### `rebuild_from_snapshot`
+
+Reconstruct a repo from a canonical [`Snapshot`] into `repo`; returns each commit's OID by the
+order it was written (topological). The store must include the object tables.
+
+```rust
+fn rebuild_from_snapshot(snap: &Snapshot, repo: &Path) -> Result<Vec<String>>
+```
+
+### `rebuild_from_store`
+
+Extract the git tables from a store and rebuild a repo at `out`. `dest` is the store location
+(DuckDB/SQLite file, JSONL dir, or Postgres URL); `schema` is the Postgres schema (default
+`entl`).
+
+```rust
+fn rebuild_from_store(
+    target: SinkTarget,
+    dest: &str,
+    schema: Option<&str>,
+    out: &Path,
+) -> Result<Vec<String>>
+```
+
+### `drain`
+
+Drive a sink off a change stream until it closes. Returns rows actually written.
+
+```rust
+fn drain(stream: &ChangeStream, sink: &mut dyn Sink, idle: Duration) -> Result<u64>
+```
+
+### `change_channel`
+
+Create a bounded change channel: `(producer, consumer)`. `capacity` bounds
+the in-flight batches (backpressure); the buffer is in-memory transport, not
+a durable log.
+
+```rust
+fn change_channel(capacity: usize) -> (ChangeSink, ChangeStream)
 ```

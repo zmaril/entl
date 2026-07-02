@@ -1,0 +1,17 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "entl"
+version = "0.0.0"
+description = "The entl engine (git + GitHub -> your database) in Python."
+requires-python = ">=3.9"
+classifiers = [
+  "Programming Language :: Rust",
+  "Programming Language :: Python :: Implementation :: CPython",
+]
+
+[tool.maturin]
+# Build the crate as a CPython extension module (stable ABI via abi3).
+features = ["pyo3/extension-module"]

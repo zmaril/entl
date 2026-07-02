@@ -43,6 +43,63 @@ export interface GithubStats {
   checkRuns: number
   users: number
 }
+/**
+ * A built-in sink target. Regenerates as a TS `enum SinkTarget` — callers write
+ * `SinkTarget.Sqlite`. Maps onto the source-of-truth [`entl_core::SinkTarget`].
+ */
+export const enum SinkTarget {
+  Sqlite = 0,
+  Jsonl = 1,
+  Postgres = 2
+}
+/** Rename a table at the sink (`from` → `to`). */
+export interface TableRename {
+  from: string
+  to: string
+}
+/** Options for `Entl.sink()`. */
+export interface SinkOptions {
+  /** Which target to write. */
+  target: SinkTarget
+  /** The SQLite file, the JSONL output directory, or the Postgres connection URL. */
+  path?: string
+  /** Also pull GitHub (default true). Requires a token (`gh auth token` / GH_TOKEN). */
+  github?: boolean
+  /** Only write these tables (default: all). */
+  tables?: Array<string>
+  /** Skip these tables. */
+  exclude?: Array<string>
+  /** Rename tables at the sink. */
+  rename?: Array<TableRename>
+  /** Target schema (Postgres only; default "entl"). */
+  schema?: string
+  /** Also store the object graph (trees/blobs + raw content) so the store can rebuild the repo. */
+  objects?: boolean
+}
+/** What a `sink()` cycle produced: the git + forge counts, and rows applied to the target. */
+export interface SinkStats {
+  newCommits: number
+  fileChanges: number
+  refs: number
+  pullRequests: number
+  issues: number
+  events: number
+  workflowRuns: number
+  checkRuns: number
+  /** Total rows the sink applied across all change batches. */
+  rows: number
+}
+/** Options for `Entl.extract()`. */
+export interface ExtractOptions {
+  /** Source store: `duckdb` | `sqlite` | `jsonl` | `postgres`. */
+  source: string
+  /** The store location (file / directory / Postgres URL). */
+  path: string
+  /** Which tables to read (default: the git tables). */
+  tables?: Array<string>
+  /** Postgres schema (default "entl"). */
+  schema?: string
+}
 /** The payload passed to the `watch` callback after each sync cycle. */
 export interface SyncStats {
   newCommits: number
@@ -70,6 +127,18 @@ export declare class Entl {
    * so a big query (Linux-kernel scale) never blocks the event loop.
    */
   query(sql: string): Promise<string>
+  /**
+   * Pull `repoPath` and sync it into `options.target` (SQLite file / JSONL dir), in one
+   * call. Writes both this handle's DuckDB (the default store) and the chosen target. Runs
+   * off the JS thread → `Promise<SinkStats>`.
+   */
+  sink(repoPath: string, options: SinkOptions): Promise<SinkStats>
+  /**
+   * Read a store back into canonical rows → `Promise<string>` (JSON: table → rows, normalized
+   * like the sinks write — oids hex, timestamps RFC3339). The reverse of `sink`. Off the JS
+   * thread.
+   */
+  extract(options: ExtractOptions): Promise<string>
   /**
    * Watch `repoPath`: on a background thread, every `intervalSecs`, `git fetch`
    * + load git + load GitHub into the DB, then call `onSync(stats)` so the JS

@@ -4,8 +4,7 @@
 -- complete *going forward* from when polling starts, not a full historical backfill.
 -- `payload` is the event's type-specific JSON, stored as text (query via
 -- json_extract(payload, '$.…') / payload::JSON).
-
-CREATE TABLE "gh_events" (
+CREATE TABLE IF NOT EXISTS "__table__" (
 	"repo_id" text NOT NULL,
 	"id" text NOT NULL,
 	"type" text,

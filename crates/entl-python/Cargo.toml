@@ -1,0 +1,16 @@
+[package]
+name = "entl-python"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Python (PyO3) binding: the entl engine, in-process in Python."
+
+[lib]
+# The Python import name is `entl`; maturin packages this cdylib as the `entl` module.
+name = "entl"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["extension-module", "abi3-py39"] }
+entl-core = { path = "../entl-core" }
+anyhow = "1"

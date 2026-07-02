@@ -1,0 +1,17 @@
+[package]
+name = "entl-testkit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Property-based round-trip testing for entl (generate → ingest → store → reassemble)."
+
+[dependencies]
+entl-core = { path = "../entl-core" }
+anyhow = "1"
+proptest = "1"
+serde_json = "1"
+chrono = "0.4"
+tiny_http = "0.12"
+
+[dev-dependencies]
+tempfile = "3"
