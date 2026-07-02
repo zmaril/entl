@@ -33,6 +33,18 @@ class Entl {
    */
   query(sql: string): Promise<string>
   /**
+   * Pull `repoPath` and sync it into `options.target` (SQLite file / JSONL dir), in one
+   * call. Writes both this handle's DuckDB (the default store) and the chosen target. Runs
+   * off the JS thread → `Promise<SinkStats>`.
+   */
+  sink(repoPath: string, options: SinkOptions): Promise<SinkStats>
+  /**
+   * Read a store back into canonical rows → `Promise<string>` (JSON: table → rows, normalized
+   * like the sinks write — oids hex, timestamps RFC3339). The reverse of `sink`. Off the JS
+   * thread.
+   */
+  extract(options: ExtractOptions): Promise<string>
+  /**
    * Watch `repoPath`: on a background thread, every `intervalSecs`, `git fetch`
    * + load git + load GitHub into the DB, then call `onSync(stats)` so the JS
    * side can mirror into PGlite (whose `live` then drives realtime). Returns a
@@ -119,6 +131,78 @@ interface GithubStats {
   workflowRuns: number
   checkRuns: number
   users: number
+}
+```
+
+### `TableRename`
+
+Rename a table at the sink (`from` → `to`).
+
+```ts
+interface TableRename {
+  from: string
+  to: string
+}
+```
+
+### `SinkOptions`
+
+Options for `Entl.sink()`.
+
+```ts
+interface SinkOptions {
+  /** Which target to write. */
+  target: SinkTarget
+  /** The SQLite file, the JSONL output directory, or the Postgres connection URL. */
+  path?: string
+  /** Also pull GitHub (default true). Requires a token (`gh auth token` / GH_TOKEN). */
+  github?: boolean
+  /** Only write these tables (default: all). */
+  tables?: Array<string>
+  /** Skip these tables. */
+  exclude?: Array<string>
+  /** Rename tables at the sink. */
+  rename?: Array<TableRename>
+  /** Target schema (Postgres only; default "entl"). */
+  schema?: string
+  /** Also store the object graph (trees/blobs + raw content) so the store can rebuild the repo. */
+  objects?: boolean
+}
+```
+
+### `SinkStats`
+
+What a `sink()` cycle produced: the git + forge counts, and rows applied to the target.
+
+```ts
+interface SinkStats {
+  newCommits: number
+  fileChanges: number
+  refs: number
+  pullRequests: number
+  issues: number
+  events: number
+  workflowRuns: number
+  checkRuns: number
+  /** Total rows the sink applied across all change batches. */
+  rows: number
+}
+```
+
+### `ExtractOptions`
+
+Options for `Entl.extract()`.
+
+```ts
+interface ExtractOptions {
+  /** Source store: `duckdb` | `sqlite` | `jsonl` | `postgres`. */
+  source: string
+  /** The store location (file / directory / Postgres URL). */
+  path: string
+  /** Which tables to read (default: the git tables). */
+  tables?: Array<string>
+  /** Postgres schema (default "entl"). */
+  schema?: string
 }
 ```
 

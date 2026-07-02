@@ -3,7 +3,7 @@ title: Schema
 description: Every table Entl writes — generated from the migrations.
 ---
 
-{/* AUTO-GENERATED from crates/entl-core/migrations/*.sql by scripts/gen-reference.ts — run `bun run gen`. Do not edit by hand. */}
+{/* AUTO-GENERATED from crates/entl-core/migrations/duckdb/tables/*.sql by scripts/gen-reference.ts — run `bun run gen`. Do not edit by hand. */}
 
 # Schema
 
@@ -19,14 +19,15 @@ computed on demand (`diffCommits`, `fileAt`; see the [Node API](/docs/reference/
 
 ### `blobs`
 
-| Column | Type | |
-|---|---|---|
-| `oid` | `blob` | **PK** |
-| `repo_id` | `text` | not null |
-| `size` | `bigint` | not null |
-| `is_binary` | `boolean` | not null, default `false` |
-| `content_text` | `text` |  |
-| `content_sha` | `text` |  |
+| Column | Type | Description | |
+|---|---|---|---|
+| `oid` | `blob` |  | **PK** |
+| `repo_id` | `text` |  | not null |
+| `size` | `bigint` |  | not null |
+| `is_binary` | `boolean` |  | not null, default `false` |
+| `content_text` | `text` |  |  |
+| `content_sha` | `text` |  |  |
+| `content` | `blob` | raw file bytes (object ingest / --objects); enables `entl rebuild` |  |
 
 ### `commit_parents`
 

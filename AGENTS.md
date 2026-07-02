@@ -2,7 +2,7 @@
 
 Guidance for coding agents working in this repo. For the *why*, see
 [notes/purpose.md](./notes/purpose.md); for the *how*, the [design docs](./notes/design/) —
-`overall`, `engine`, `analysis`, `cli`, `multilibrary`, `multidb`, and `docs`.
+`overall`, `engine`, `analysis`, `cli`, `multilibrary`, `multidb`, `testing`, and `docs`.
 
 ## What Entl is
 
@@ -21,6 +21,8 @@ crates/entl-core     the engine (Rust). Write path uses the raw duckdb crate; sc
 crates/entl-cli      the CLI (init/load/watch/analysis/query/tables).
 crates/entl-node     napi bindings: the engine in-process in Node/Bun. Async lives here
                      (AsyncTask → Promise). Also the PGlite/Postgres sink (sync.ts).
+crates/entl-python   PyO3 bindings (built via maturin): the engine in-process in CPython.
+                     Async is the GIL released via allow_threads. Mirrors entl-node's surface.
 site/                the docs site (Fumadocs — Next.js + MDX, static export). See notes/design/docs.md.
 notes/               design docs.
 ```
@@ -37,9 +39,35 @@ cd crates/entl-node && bun run build
 bun run gen                      # regenerate the PGlite-sink table types (tables.gen.ts)
 bun test                         # coverage test: the sink must cover every entl table
 
+# the Python addon (PyO3 → maturin). Excluded from the default cargo set, like entl-node.
+cd crates/entl-python
+uv venv && uv pip install maturin pytest
+# Use the venv's own maturin/python (NOT `uv run maturin` — its editable install can load a
+# stale .so after a rebuild). The forward-compat flag: the local interpreter (3.14) is newer
+# than pyo3's known-max; abi3 makes the wheel forward-compatible. Drop it once pyo3 catches up.
+PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 .venv/bin/maturin develop
+.venv/bin/python -m pytest tests/   # sink() a repo into a temp SQLite, assert idempotent counts
+
+# the CLI: pull a repo and sync into a target DB (sqlite / jsonl / postgres)
+./target/release/entl sink ./some-repo --to sqlite   --dest out.db
+./target/release/entl sink ./some-repo --to postgres --dest "postgres://user:pw@host/db" \
+    --tables commits,gh_pull_requests --rename commits=git_commits --schema entl
+
 # the CLI
 ./target/release/entl load ./some-repo --db data.duckdb
 ./target/release/entl query "SELECT * FROM gh_pull_requests LIMIT 5" --db data.duckdb
+# rehydrate a repo from a store (needs `--objects` at sink time):
+./target/release/entl sink ./some-repo --to sqlite --dest s.db --db :memory: --no-github --objects
+./target/release/entl rebuild --from sqlite --dest s.db --out /tmp/rehydrated
+
+# the round-trip property tests (notes/design/testing.md). Embedded stores always run;
+# Postgres runs when ENTL_TEST_PG is set.
+cargo test -p entl-testkit                                  # P1 store round-trip, P2 OID-exact, P3 forge
+ENTL_TEST_PG=postgres://postgres:pg@localhost:55432/entl cargo test -p entl-testkit
+# the cross-language matrix: generate a corpus, then each binding sinks + extracts it back.
+cargo run -p entl-testkit --bin gen_corpus -- /tmp/entl-corpus
+ENTL_CORPUS=/tmp/entl-corpus bun test matrix.test.ts        # (in crates/entl-node)
+ENTL_CORPUS=/tmp/entl-corpus python -m pytest tests/test_matrix.py  # (in crates/entl-python)
 
 # the docs site
 cd site && bun install
@@ -49,17 +77,26 @@ bun run gen                      # regenerate the reference pages from source
 ```
 
 **After changing `entl-core`**, rebuild the consumers to see the change: the napi addon
-(`cd crates/entl-node && bun run build`) and the CLI (`cargo build --release`). The docs
-generator reads source *files*, so it picks up changes without a rebuild.
+(`cd crates/entl-node && bun run build`), the Python addon (`cd crates/entl-python && uv run
+maturin develop`), and the CLI (`cargo build --release`). The docs generator reads source
+*files*, so it picks up changes without a rebuild.
 
 ## Conventions
 
 - **Forge-namespacing.** GitHub tables are `gh_*`; git-generic tables (`commits`, `refs`,
   `file_changes`, …) are bare so a future forge reuses them. Keep new GitHub tables `gh_`.
-- **Migrations are append-only SQL.** Editing an existing migration does **not** re-run on
-  an existing DB — add a new `000N_*.sql`, or delete the (derived, rebuildable) `.duckdb`
-  cache in dev. A fresh DB applies all migrations in order.
-- **Schema docs live in the migrations.** A `--` comment block above `CREATE TABLE`
+- **One schema mechanism: per-table templates, no data migration.** Every store — the DuckDB
+  engine store *and* the portable sinks — is built from name-templated per-table DDL in
+  `migrations/<dialect>/tables/<table>.sql` (`__table__` → the target name), listed in
+  `migrations.rs` (`DUCKDB_TABLES` / `SQLITE_TABLES` / `PG_TABLES`). The store is a **derived
+  cache**, so there are **no append-only migrations**: `db.rs` content-hashes the schema and, on
+  any change, **drops every table and rebuilds** — the caller just re-ingests. DuckDB applies all
+  its templates + `migrations/duckdb/extras.sql` (macros + hex views) on open; the sinks
+  instantiate a template lazily on first write (and `--rename` gets the real typed schema + PK).
+  **Add a table** = add its template under each dialect it belongs to + its name to the list(s) in
+  `migrations.rs`. Edit a template freely — the next open rebuilds. In dev you can also just delete
+  the `.duckdb`.
+- **Schema docs live in the templates.** A `--` comment block above `CREATE TABLE`
   documents the table; a trailing `-- …` on a column documents the column. These are inert
   SQL and flow into the generated schema reference. Same idea for Rust (`///`), the napi
   bindings (JSDoc), and the CLI (clap `///` help) — the generator ports all of them.

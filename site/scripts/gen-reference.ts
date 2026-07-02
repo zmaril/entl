@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // Generates reference docs from the engine's own sources of truth:
-//   - reference/schema.mdx    ← crates/entl-core/migrations/*.sql  (always; committed)
+//   - reference/schema.mdx    ← crates/entl-core/migrations/duckdb/tables/*.sql  (always; committed)
 //   - reference/rust-api.mdx  ← crates/entl-core/src/*.rs          (always; committed)
 //   - reference/node-api.mdx ← crates/entl-node/index.d.ts        (when present)
 //   - reference/cli.mdx       ← `target/release/entl --help`       (when built)
@@ -15,7 +15,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..", "..");
-const MIGRATIONS = join(ROOT, "crates/entl-core/migrations");
+const MIGRATIONS = join(ROOT, "crates/entl-core/migrations/duckdb/tables");
 const CORE_SRC = join(ROOT, "crates/entl-core/src");
 const DTS = join(ROOT, "crates/entl-node/index.d.ts");
 const BIN = join(ROOT, "target/release/entl");
@@ -39,6 +39,8 @@ type Table = { name: string; cols: Col[]; desc?: string };
 function parseTables(): Table[] {
   const tables: Table[] = [];
   for (const file of readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) {
+    // One file per table; the DDL uses the `__table__` placeholder, so the name is the filename.
+    const tableName = file.replace(/\.sql$/, "");
     const lines = readFileSync(join(MIGRATIONS, file), "utf8").split("\n");
     let comment: string[] = [];
     for (let i = 0; i < lines.length; i++) {
@@ -81,7 +83,7 @@ function parseTables(): Table[] {
         });
       }
       for (const c of cols) c.pk = pk.has(c.name);
-      tables.push({ name: ct[1], cols, desc: comment.join(" ").trim() || undefined });
+      tables.push({ name: tableName, cols, desc: comment.join(" ").trim() || undefined });
       comment = [];
       i = j;
     }
@@ -110,7 +112,7 @@ function genSchema(): string {
   const tables = parseTables();
   const gh = tables.filter((t) => t.name.startsWith("gh_"));
   const git = tables.filter((t) => !t.name.startsWith("gh_"));
-  return `${fm("Schema", "Every table Entl writes — generated from the migrations.")}${banner("crates/entl-core/migrations/*.sql")}# Schema
+  return `${fm("Schema", "Every table Entl writes — generated from the migrations.")}${banner("crates/entl-core/migrations/duckdb/tables/*.sql")}# Schema
 
 Entl writes one DuckDB. **git-generic** tables are bare (so a future forge reuses them);
 **GitHub** tables are namespaced \`gh_*\`. ${tables.length} tables in total.

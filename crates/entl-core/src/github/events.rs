@@ -35,13 +35,14 @@ struct EventActor {
 pub async fn sync_events(
     db: &Db,
     client: &Octocrab,
+    base: &str,
     owner: &str,
     name: &str,
     repo_id: &str,
     stats: &mut GithubIngest,
 ) -> Result<bool> {
     let resource = format!("gh:events:{repo_id}");
-    let gate_url = format!("https://api.github.com/repos/{owner}/{name}/events?per_page=1");
+    let gate_url = format!("{base}/repos/{owner}/{name}/events?per_page=1");
     let (changed, etag) = etag_gate(client, &gate_url, read_etag(db, &resource)?.as_deref()).await;
     if !changed {
         eprintln!("github: events unchanged (304)");

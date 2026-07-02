@@ -19,6 +19,14 @@ use gix::object::tree::diff::Change;
 use rayon::prelude::*;
 
 use crate::db::Db;
+use crate::stream::{ChangeBatch, ChangeOp, ChangeSink};
+use duckdb::arrow::array::{
+    ArrayRef, BinaryBuilder, BooleanBuilder, Int32Builder, StringBuilder,
+    TimestampMicrosecondBuilder,
+};
+use duckdb::arrow::datatypes::{DataType, Field, Schema};
+use duckdb::arrow::record_batch::RecordBatch;
+use std::sync::Arc;
 
 #[derive(Debug, Default)]
 pub struct GitIngest {
@@ -35,7 +43,8 @@ struct RefRecord {
 }
 
 // Owned row buffers. Oids are kept as `ObjectId` (Copy, 20 bytes, no heap alloc)
-// and appended as raw BLOB bytes — no hex encoding (notes/design/engine.md / 0004_hex_views).
+// and appended as raw BLOB bytes — no hex encoding (the hex views in migrations/duckdb/extras.sql
+// project them to hex on read; see notes/design/engine.md).
 struct CommitRow {
     oid: gix::ObjectId,
     tree_oid: gix::ObjectId,
@@ -134,8 +143,20 @@ struct Bundle {
 
 const OBJ_CACHE: usize = 96 * 1024 * 1024; // per-thread object cache
 
-/// Ingest git history. `counter` is incremented per commit for live progress.
+/// Ingest git history (no change stream) — see [`ingest_git_streamed`].
 pub fn ingest_git(db: &Db, path: &str, counter: &AtomicU64) -> Result<GitIngest> {
+    ingest_git_streamed(db, path, counter, None)
+}
+
+/// Ingest git history, teeing the new rows into `sink` as Arrow change batches
+/// (notes/design/engine.md, "The change stream"). `counter` is incremented per
+/// commit for live progress.
+pub fn ingest_git_streamed(
+    db: &Db,
+    path: &str,
+    counter: &AtomicU64,
+    sink: Option<&ChangeSink>,
+) -> Result<GitIngest> {
     let mut repo = gix::discover(path).context("discover git repo")?;
     repo.object_cache_size(OBJ_CACHE);
     let (repo_id, canon_str) = compute_repo_id(&repo);
@@ -197,6 +218,12 @@ pub fn ingest_git(db: &Db, path: &str, counter: &AtomicU64) -> Result<GitIngest>
         app.flush()?;
     }
 
+    // Stream refs from memory — the repo's refs are wholesale-replaced each pull.
+    if let Some(sink) = sink {
+        let rows: Vec<&RefRecord> = by_name.values().copied().collect();
+        sink.emit(ChangeBatch::new("refs", ChangeOp::Replace, refs_batch(&rows, &repo_id)?));
+    }
+
     // Walk once (cheap) to collect new commit oids; the heavy per-commit work
     // (decode + tree-diff + numstat) is parallelized below.
     let mut new_oids: Vec<gix::ObjectId> = Vec::new();
@@ -222,33 +249,50 @@ pub fn ingest_git(db: &Db, path: &str, counter: &AtomicU64) -> Result<GitIngest>
             let mut pa = writer_conn.appender("commit_parents")?;
             let mut fa = writer_conn.appender("file_changes")?;
             let (mut nc, mut nfc) = (0usize, 0usize);
+            let (mut cbuf, mut pbuf, mut fbuf) =
+                (Vec::<CommitRow>::new(), Vec::<ParentRow>::new(), Vec::<ChangeRow>::new());
+            let mut live = true;
             for b in rx.iter() {
-                let r = &b.commit;
-                ca.append_row(params![
-                    r.oid.as_bytes(), repo_id_w, r.tree_oid.as_bytes(), r.message, r.summary,
-                    r.author_name, r.author_email,
-                    Value::Timestamp(TimeUnit::Microsecond, r.author_us), r.author_tz,
-                    r.committer_name, r.committer_email,
-                    Value::Timestamp(TimeUnit::Microsecond, r.committer_us), r.committer_tz,
-                    r.parent_count, r.is_merge, r.gpg_signed,
-                ])?;
-                for p in &b.parents {
-                    pa.append_row(params![p.commit_oid.as_bytes(), p.parent_oid.as_bytes(), p.idx])?;
-                }
-                for c in &b.changes {
-                    nfc += 1;
-                    fa.append_row(params![
-                        c.commit_oid.as_bytes(), c.path, c.old_path, c.status,
-                        c.additions, c.deletions,
-                        c.blob_oid.as_ref().map(|o| o.as_bytes()),
-                        c.old_blob_oid.as_ref().map(|o| o.as_bytes()),
+                {
+                    let r = &b.commit;
+                    ca.append_row(params![
+                        r.oid.as_bytes(), repo_id_w, r.tree_oid.as_bytes(), r.message, r.summary,
+                        r.author_name, r.author_email,
+                        Value::Timestamp(TimeUnit::Microsecond, r.author_us), r.author_tz,
+                        r.committer_name, r.committer_email,
+                        Value::Timestamp(TimeUnit::Microsecond, r.committer_us), r.committer_tz,
+                        r.parent_count, r.is_merge, r.gpg_signed,
                     ])?;
+                    for p in &b.parents {
+                        pa.append_row(params![p.commit_oid.as_bytes(), p.parent_oid.as_bytes(), p.idx])?;
+                    }
+                    for c in &b.changes {
+                        nfc += 1;
+                        fa.append_row(params![
+                            c.commit_oid.as_bytes(), c.path, c.old_path, c.status,
+                            c.additions, c.deletions,
+                            c.blob_oid.as_ref().map(|o| o.as_bytes()),
+                            c.old_blob_oid.as_ref().map(|o| o.as_bytes()),
+                        ])?;
+                    }
+                    nc += 1;
                 }
-                nc += 1;
+                // Feed the change stream from these in-memory rows *during* the pull.
+                if let (Some(sink), true) = (sink, live) {
+                    cbuf.push(b.commit);
+                    pbuf.extend(b.parents);
+                    fbuf.extend(b.changes);
+                    if cbuf.len() >= STREAM_CHUNK {
+                        live = flush_git_stream(sink, &repo_id_w, &mut cbuf, &mut pbuf, &mut fbuf)?;
+                    }
+                }
             }
             ca.flush()?;
             pa.flush()?;
             fa.flush()?;
+            if let (Some(sink), true) = (sink, live) {
+                flush_git_stream(sink, &repo_id_w, &mut cbuf, &mut pbuf, &mut fbuf)?;
+            }
             Ok((nc, nfc))
         });
 
@@ -409,6 +453,234 @@ fn map_change(
             blob_oid: Some(id.detach()),
             old_blob_oid: Some(source_id.detach()),
         }),
+    }
+}
+
+// ── Arrow batch builders: the change stream is fed from these in-memory rows
+// *during* the pull (not by reading DuckDB back). oids stay raw `Binary` (sinks
+// hex them); timestamps are `Timestamp(us)`; nullable columns use append_option.
+
+/// How many commits to accumulate before emitting a batch (bounds memory).
+const STREAM_CHUNK: usize = 2000;
+
+fn commits_batch(rows: &[CommitRow], repo_id: &str) -> Result<RecordBatch> {
+    let (mut oid, mut tree) = (BinaryBuilder::new(), BinaryBuilder::new());
+    let (mut rid, mut msg, mut summ) = (StringBuilder::new(), StringBuilder::new(), StringBuilder::new());
+    let (mut an, mut ae, mut atz) = (StringBuilder::new(), StringBuilder::new(), StringBuilder::new());
+    let (mut cn, mut ce, mut ctz) = (StringBuilder::new(), StringBuilder::new(), StringBuilder::new());
+    let (mut aw, mut cw) = (TimestampMicrosecondBuilder::new(), TimestampMicrosecondBuilder::new());
+    let mut pc = Int32Builder::new();
+    let (mut merge, mut gpg) = (BooleanBuilder::new(), BooleanBuilder::new());
+    for r in rows {
+        oid.append_value(r.oid.as_bytes());
+        rid.append_value(repo_id);
+        tree.append_value(r.tree_oid.as_bytes());
+        msg.append_value(&r.message);
+        summ.append_value(&r.summary);
+        an.append_value(&r.author_name);
+        ae.append_value(&r.author_email);
+        aw.append_value(r.author_us);
+        atz.append_value(&r.author_tz);
+        cn.append_value(&r.committer_name);
+        ce.append_value(&r.committer_email);
+        cw.append_value(r.committer_us);
+        ctz.append_value(&r.committer_tz);
+        pc.append_value(r.parent_count);
+        merge.append_value(r.is_merge);
+        gpg.append_value(r.gpg_signed);
+    }
+    let ts = || DataType::Timestamp(duckdb::arrow::datatypes::TimeUnit::Microsecond, None);
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("oid", DataType::Binary, false),
+        Field::new("repo_id", DataType::Utf8, false),
+        Field::new("tree_oid", DataType::Binary, false),
+        Field::new("message", DataType::Utf8, false),
+        Field::new("summary", DataType::Utf8, false),
+        Field::new("author_name", DataType::Utf8, true),
+        Field::new("author_email", DataType::Utf8, true),
+        Field::new("author_when", ts(), true),
+        Field::new("author_tz", DataType::Utf8, true),
+        Field::new("committer_name", DataType::Utf8, true),
+        Field::new("committer_email", DataType::Utf8, true),
+        Field::new("committer_when", ts(), true),
+        Field::new("committer_tz", DataType::Utf8, true),
+        Field::new("parent_count", DataType::Int32, false),
+        Field::new("is_merge", DataType::Boolean, false),
+        Field::new("gpg_signed", DataType::Boolean, false),
+    ]));
+    let cols: Vec<ArrayRef> = vec![
+        Arc::new(oid.finish()), Arc::new(rid.finish()), Arc::new(tree.finish()),
+        Arc::new(msg.finish()), Arc::new(summ.finish()), Arc::new(an.finish()),
+        Arc::new(ae.finish()), Arc::new(aw.finish()), Arc::new(atz.finish()),
+        Arc::new(cn.finish()), Arc::new(ce.finish()), Arc::new(cw.finish()),
+        Arc::new(ctz.finish()), Arc::new(pc.finish()), Arc::new(merge.finish()),
+        Arc::new(gpg.finish()),
+    ];
+    Ok(RecordBatch::try_new(schema, cols)?)
+}
+
+fn parents_batch(rows: &[ParentRow]) -> Result<RecordBatch> {
+    let (mut co, mut po, mut idx) = (BinaryBuilder::new(), BinaryBuilder::new(), Int32Builder::new());
+    for r in rows {
+        co.append_value(r.commit_oid.as_bytes());
+        po.append_value(r.parent_oid.as_bytes());
+        idx.append_value(r.idx);
+    }
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("commit_oid", DataType::Binary, false),
+        Field::new("parent_oid", DataType::Binary, false),
+        Field::new("idx", DataType::Int32, false),
+    ]));
+    let cols: Vec<ArrayRef> = vec![Arc::new(co.finish()), Arc::new(po.finish()), Arc::new(idx.finish())];
+    Ok(RecordBatch::try_new(schema, cols)?)
+}
+
+fn file_changes_batch(rows: &[ChangeRow]) -> Result<RecordBatch> {
+    let (mut co, mut bo, mut obo) = (BinaryBuilder::new(), BinaryBuilder::new(), BinaryBuilder::new());
+    let (mut path, mut oldp, mut status) = (StringBuilder::new(), StringBuilder::new(), StringBuilder::new());
+    let (mut add, mut del) = (Int32Builder::new(), Int32Builder::new());
+    for r in rows {
+        co.append_value(r.commit_oid.as_bytes());
+        path.append_value(&r.path);
+        oldp.append_option(r.old_path.as_deref());
+        status.append_value(r.status);
+        add.append_option(r.additions);
+        del.append_option(r.deletions);
+        bo.append_option(r.blob_oid.as_ref().map(|o| o.as_bytes()));
+        obo.append_option(r.old_blob_oid.as_ref().map(|o| o.as_bytes()));
+    }
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("commit_oid", DataType::Binary, false),
+        Field::new("path", DataType::Utf8, false),
+        Field::new("old_path", DataType::Utf8, true),
+        Field::new("status", DataType::Utf8, false),
+        Field::new("additions", DataType::Int32, true),
+        Field::new("deletions", DataType::Int32, true),
+        Field::new("blob_oid", DataType::Binary, true),
+        Field::new("old_blob_oid", DataType::Binary, true),
+    ]));
+    let cols: Vec<ArrayRef> = vec![
+        Arc::new(co.finish()), Arc::new(path.finish()), Arc::new(oldp.finish()),
+        Arc::new(status.finish()), Arc::new(add.finish()), Arc::new(del.finish()),
+        Arc::new(bo.finish()), Arc::new(obo.finish()),
+    ];
+    Ok(RecordBatch::try_new(schema, cols)?)
+}
+
+fn refs_batch(rows: &[&RefRecord], repo_id: &str) -> Result<RecordBatch> {
+    let (mut rid, mut name, mut kind, mut up) =
+        (StringBuilder::new(), StringBuilder::new(), StringBuilder::new(), StringBuilder::new());
+    let mut tgt = BinaryBuilder::new();
+    let mut sym = BooleanBuilder::new();
+    for r in rows {
+        rid.append_value(repo_id);
+        name.append_value(&r.name);
+        kind.append_value(r.kind);
+        tgt.append_value(r.target_oid.as_bytes());
+        sym.append_value(r.is_symbolic);
+        up.append_null(); // upstream — not tracked here yet
+    }
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("repo_id", DataType::Utf8, false),
+        Field::new("name", DataType::Utf8, false),
+        Field::new("kind", DataType::Utf8, false),
+        Field::new("target_oid", DataType::Binary, false),
+        Field::new("is_symbolic", DataType::Boolean, false),
+        Field::new("upstream", DataType::Utf8, true),
+    ]));
+    let cols: Vec<ArrayRef> = vec![
+        Arc::new(rid.finish()), Arc::new(name.finish()), Arc::new(kind.finish()),
+        Arc::new(tgt.finish()), Arc::new(sym.finish()), Arc::new(up.finish()),
+    ];
+    Ok(RecordBatch::try_new(schema, cols)?)
+}
+
+/// Build + emit the accumulated commit/parent/file-change batches, then clear.
+/// Returns `false` if the consumer hung up (caller should stop).
+fn flush_git_stream(
+    sink: &ChangeSink,
+    repo_id: &str,
+    cbuf: &mut Vec<CommitRow>,
+    pbuf: &mut Vec<ParentRow>,
+    fbuf: &mut Vec<ChangeRow>,
+) -> Result<bool> {
+    let mut live = true;
+    if !cbuf.is_empty() {
+        live &= sink.emit(ChangeBatch::new("commits", ChangeOp::Insert, commits_batch(cbuf, repo_id)?));
+    }
+    if !pbuf.is_empty() {
+        live &= sink.emit(ChangeBatch::new("commit_parents", ChangeOp::Insert, parents_batch(pbuf)?));
+    }
+    if !fbuf.is_empty() {
+        live &= sink.emit(ChangeBatch::new("file_changes", ChangeOp::Insert, file_changes_batch(fbuf)?));
+    }
+    cbuf.clear();
+    pbuf.clear();
+    fbuf.clear();
+    Ok(live)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{change_channel, Db, Poll};
+    use std::collections::HashMap;
+    use std::process::Command;
+    use std::time::Duration;
+
+    fn git(dir: &std::path::Path, args: &[&str]) {
+        let out = Command::new("git")
+            .args(args)
+            .current_dir(dir)
+            .env("GIT_AUTHOR_NAME", "t")
+            .env("GIT_AUTHOR_EMAIL", "t@e")
+            .env("GIT_COMMITTER_NAME", "t")
+            .env("GIT_COMMITTER_EMAIL", "t@e")
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "git {args:?} failed");
+    }
+
+    /// End-to-end: ingest a real (tiny) repo and drain its changes off `poll`.
+    #[test]
+    fn ingest_streams_change_batches_to_poll() {
+        let dir = std::env::temp_dir().join(format!("entl-stream-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        git(&dir, &["init", "-q"]);
+        std::fs::write(dir.join("a.txt"), "hello\n").unwrap();
+        git(&dir, &["add", "."]);
+        git(&dir, &["commit", "-qm", "first"]);
+        std::fs::write(dir.join("a.txt"), "hello\nworld\n").unwrap();
+        git(&dir, &["add", "."]);
+        git(&dir, &["commit", "-qm", "second"]);
+
+        let db = Db::open(":memory:").unwrap();
+        db.migrate().unwrap();
+        let (sink, stream) = change_channel(1024);
+        let path = dir.to_string_lossy().to_string();
+
+        // Producer on its own thread; dropping `sink` at the end closes the stream.
+        let producer = std::thread::spawn(move || {
+            let counter = AtomicU64::new(0);
+            ingest_git_streamed(&db, &path, &counter, Some(&sink)).unwrap()
+        });
+
+        let mut rows: HashMap<String, usize> = HashMap::new();
+        loop {
+            match stream.poll(Duration::from_secs(10)) {
+                Poll::Batch(b) => *rows.entry(b.table.clone()).or_default() += b.len(),
+                Poll::Closed => break,
+                Poll::Idle => panic!("producer stalled — no batch within timeout"),
+            }
+        }
+        let ingest = producer.join().unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(ingest.new_commits, 2, "ingested two commits");
+        assert_eq!(rows.get("commits").copied().unwrap_or(0), 2, "two commit rows streamed");
+        assert!(rows.get("file_changes").copied().unwrap_or(0) >= 2, "file_changes streamed");
+        assert!(rows.contains_key("refs"), "refs streamed");
     }
 }
 

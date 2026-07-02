@@ -214,7 +214,158 @@ impl From<entl_core::GithubIngest> for GithubStats {
     }
 }
 
+/// A built-in sink target. Regenerates as a TS `enum SinkTarget` — callers write
+/// `SinkTarget.Sqlite`. Maps onto the source-of-truth [`entl_core::SinkTarget`].
+#[napi]
+pub enum SinkTarget {
+    Sqlite,
+    Jsonl,
+    Postgres,
+}
+impl From<SinkTarget> for entl_core::SinkTarget {
+    fn from(t: SinkTarget) -> Self {
+        match t {
+            SinkTarget::Sqlite => entl_core::SinkTarget::Sqlite,
+            SinkTarget::Jsonl => entl_core::SinkTarget::Jsonl,
+            SinkTarget::Postgres => entl_core::SinkTarget::Postgres,
+        }
+    }
+}
+
+/// Rename a table at the sink (`from` → `to`).
+#[napi(object)]
+pub struct TableRename {
+    pub from: String,
+    pub to: String,
+}
+
+/// Options for `Entl.sink()`.
+#[napi(object)]
+pub struct SinkOptions {
+    /// Which target to write.
+    pub target: SinkTarget,
+    /// The SQLite file, the JSONL output directory, or the Postgres connection URL.
+    pub path: Option<String>,
+    /// Also pull GitHub (default true). Requires a token (`gh auth token` / GH_TOKEN).
+    pub github: Option<bool>,
+    /// Only write these tables (default: all).
+    pub tables: Option<Vec<String>>,
+    /// Skip these tables.
+    pub exclude: Option<Vec<String>>,
+    /// Rename tables at the sink.
+    pub rename: Option<Vec<TableRename>>,
+    /// Target schema (Postgres only; default "entl").
+    pub schema: Option<String>,
+    /// Also store the object graph (trees/blobs + raw content) so the store can rebuild the repo.
+    pub objects: Option<bool>,
+}
+
+impl SinkOptions {
+    fn select(&self) -> entl_core::SinkSelect {
+        entl_core::SinkSelect {
+            tables: self.tables.clone(),
+            exclude: self.exclude.clone().unwrap_or_default(),
+            rename: self
+                .rename
+                .as_ref()
+                .map(|rs| rs.iter().map(|r| (r.from.clone(), r.to.clone())).collect())
+                .unwrap_or_default(),
+            schema: self.schema.clone(),
+        }
+    }
+}
+
+/// What a `sink()` cycle produced: the git + forge counts, and rows applied to the target.
+#[napi(object)]
+pub struct SinkStats {
+    pub new_commits: i64,
+    pub file_changes: i64,
+    pub refs: i64,
+    pub pull_requests: i64,
+    pub issues: i64,
+    pub events: i64,
+    pub workflow_runs: i64,
+    pub check_runs: i64,
+    /// Total rows the sink applied across all change batches.
+    pub rows: i64,
+}
+impl From<entl_core::SinkOutcome> for SinkStats {
+    fn from(o: entl_core::SinkOutcome) -> Self {
+        let gh = o.github.as_ref();
+        Self {
+            new_commits: o.git.new_commits as i64,
+            file_changes: o.git.file_changes as i64,
+            refs: o.git.refs as i64,
+            pull_requests: gh.map(|g| g.pull_requests).unwrap_or(0) as i64,
+            issues: gh.map(|g| g.issues).unwrap_or(0) as i64,
+            events: gh.map(|g| g.events).unwrap_or(0) as i64,
+            workflow_runs: gh.map(|g| g.workflow_runs).unwrap_or(0) as i64,
+            check_runs: gh.map(|g| g.check_runs).unwrap_or(0) as i64,
+            rows: o.rows as i64,
+        }
+    }
+}
+
 // ---- AsyncTasks: blocking work, run on libuv's threadpool ----
+
+pub struct SinkTask {
+    db: Db,
+    repo_path: String,
+    target: entl_core::SinkTarget,
+    path: Option<String>,
+    github: bool,
+    objects: bool,
+    select: entl_core::SinkSelect,
+}
+impl Task for SinkTask {
+    type Output = entl_core::SinkOutcome;
+    type JsValue = SinkStats;
+    fn compute(&mut self) -> Result<Self::Output> {
+        let sink = entl_core::build_sink(self.target, self.path.as_deref(), self.select.clone())
+            .map_err(err)?;
+        entl_core::pull_into(
+            &self.db,
+            &self.repo_path,
+            sink,
+            entl_core::PullOpts { github: self.github, objects: self.objects },
+        )
+        .map_err(err)
+    }
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(output.into())
+    }
+}
+
+/// Options for `Entl.extract()`.
+#[napi(object)]
+pub struct ExtractOptions {
+    /// Source store: `duckdb` | `sqlite` | `jsonl` | `postgres`.
+    pub source: String,
+    /// The store location (file / directory / Postgres URL).
+    pub path: String,
+    /// Which tables to read (default: the git tables).
+    pub tables: Option<Vec<String>>,
+    /// Postgres schema (default "entl").
+    pub schema: Option<String>,
+}
+
+pub struct ExtractTask {
+    source: String,
+    path: String,
+    tables: Vec<String>,
+    schema: Option<String>,
+}
+impl Task for ExtractTask {
+    type Output = String;
+    type JsValue = String;
+    fn compute(&mut self) -> Result<String> {
+        entl_core::extract_json(&self.source, &self.path, &self.tables, self.schema.as_deref())
+            .map_err(err)
+    }
+    fn resolve(&mut self, _env: Env, output: String) -> Result<String> {
+        Ok(output)
+    }
+}
 
 pub struct LoadGitTask {
     db: Db,
@@ -348,6 +499,40 @@ impl Entl {
     pub fn query(&self, sql: String) -> Result<AsyncTask<QueryTask>> {
         let db = Db::from_conn(self.db.conn.try_clone().map_err(err)?);
         Ok(AsyncTask::new(QueryTask { db, sql }))
+    }
+
+    /// Pull `repoPath` and sync it into `options.target` (SQLite file / JSONL dir), in one
+    /// call. Writes both this handle's DuckDB (the default store) and the chosen target. Runs
+    /// off the JS thread → `Promise<SinkStats>`.
+    #[napi(ts_return_type = "Promise<SinkStats>")]
+    pub fn sink(&self, repo_path: String, options: SinkOptions) -> Result<AsyncTask<SinkTask>> {
+        let db = Db::from_conn(self.db.conn.try_clone().map_err(err)?);
+        let select = options.select();
+        Ok(AsyncTask::new(SinkTask {
+            db,
+            repo_path,
+            target: options.target.into(),
+            path: options.path,
+            github: options.github.unwrap_or(true),
+            objects: options.objects.unwrap_or(false),
+            select,
+        }))
+    }
+
+    /// Read a store back into canonical rows → `Promise<string>` (JSON: table → rows, normalized
+    /// like the sinks write — oids hex, timestamps RFC3339). The reverse of `sink`. Off the JS
+    /// thread.
+    #[napi(ts_return_type = "Promise<string>")]
+    pub fn extract(&self, options: ExtractOptions) -> AsyncTask<ExtractTask> {
+        let tables = options.tables.unwrap_or_else(|| {
+            entl_core::extract::GIT_TABLES.iter().map(|s| s.to_string()).collect()
+        });
+        AsyncTask::new(ExtractTask {
+            source: options.source,
+            path: options.path,
+            tables,
+            schema: options.schema,
+        })
     }
 
     /// Watch `repoPath`: on a background thread, every `intervalSecs`, `git fetch`

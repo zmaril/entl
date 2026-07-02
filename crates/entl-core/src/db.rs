@@ -2,9 +2,8 @@
 
 use anyhow::Result;
 use duckdb::Connection;
-use std::collections::HashSet;
 
-use crate::migrations::MIGRATIONS;
+use crate::migrations::{instantiate, DUCKDB_EXTRAS, DUCKDB_TABLES};
 
 /// An open entl database.
 pub struct Db {
@@ -27,37 +26,54 @@ impl Db {
         Self { conn }
     }
 
-    /// Apply pending migrations idempotently (tracked in `_entl_migrations`).
+    /// Apply the schema. The store is a *derived cache* (notes/design + AGENTS.md): there is no
+    /// data migration. The schema (all per-table templates + the DuckDB extras) is content-hashed;
+    /// if it's unchanged this is a no-op, otherwise every table is dropped and re-created and the
+    /// caller re-ingests. Edit the templates freely — no numbered migrations to maintain.
     pub fn migrate(&self) -> Result<()> {
-        self.conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS _entl_migrations (
-                 name TEXT PRIMARY KEY,
-                 applied_at TIMESTAMPTZ DEFAULT now()
-             );",
-        )?;
-
-        let applied: HashSet<String> = {
-            let mut stmt = self.conn.prepare("SELECT name FROM _entl_migrations")?;
-            let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
-            rows.collect::<duckdb::Result<_>>()?
-        };
-
-        for (name, sql) in MIGRATIONS {
-            if applied.contains(*name) {
-                continue;
-            }
-            self.conn.execute_batch(sql)?;
-            self.conn
-                .execute("INSERT INTO _entl_migrations (name) VALUES (?)", [*name])?;
+        let version = schema_hash();
+        self.conn
+            .execute_batch("CREATE TABLE IF NOT EXISTS _entl_schema (version TEXT);")?;
+        let stored: Option<String> = self
+            .conn
+            .query_row("SELECT version FROM _entl_schema LIMIT 1", [], |r| r.get(0))
+            .ok();
+        if stored.as_deref() == Some(version.as_str()) {
+            return Ok(()); // schema up to date
         }
+
+        // Schema changed (or fresh DB) → drop every table and rebuild.
+        let existing: Vec<String> = {
+            let mut stmt = self.conn.prepare(
+                "SELECT table_name FROM information_schema.tables \
+                 WHERE table_schema = 'main' AND table_type = 'BASE TABLE' \
+                 AND table_name <> '_entl_schema'",
+            )?;
+            stmt.query_map([], |r| r.get::<_, String>(0))?
+                .collect::<duckdb::Result<_>>()?
+        };
+        for t in existing {
+            self.conn.execute_batch(&format!("DROP TABLE IF EXISTS \"{t}\" CASCADE;"))?;
+        }
+        for (name, _) in DUCKDB_TABLES {
+            let ddl = instantiate(DUCKDB_TABLES, name, name).expect("template exists");
+            self.conn.execute_batch(&ddl)?;
+        }
+        self.conn.execute_batch(DUCKDB_EXTRAS)?;
+        self.conn.execute("DELETE FROM _entl_schema", [])?;
+        self.conn
+            .execute("INSERT INTO _entl_schema (version) VALUES (?)", [&version])?;
         Ok(())
     }
 
-    /// Count of applied migrations (for diagnostics/tests).
-    pub fn applied_migrations(&self) -> Result<i64> {
-        let n = self
-            .conn
-            .query_row("SELECT count(*) FROM _entl_migrations", [], |r| r.get(0))?;
+    /// Number of base tables in the store (for diagnostics/tests).
+    pub fn table_count(&self) -> Result<i64> {
+        let n = self.conn.query_row(
+            "SELECT count(*) FROM information_schema.tables \
+             WHERE table_schema = 'main' AND table_type = 'BASE TABLE' AND table_name <> '_entl_schema'",
+            [],
+            |r| r.get(0),
+        )?;
         Ok(n)
     }
 
@@ -68,4 +84,23 @@ impl Db {
             stmt.query_arrow([])?.collect();
         Ok(duckdb::arrow::util::pretty::pretty_format_batches(&batches)?.to_string())
     }
+}
+
+/// A stable content hash of the whole schema (all DuckDB templates + extras). FNV-1a, not std's
+/// `DefaultHasher` (which can drift across std versions and cause spurious rebuilds). Any edit to
+/// a template bumps it, triggering a drop-&-rebuild on next open — no manual version bumping.
+fn schema_hash() -> String {
+    fn fnv(mut h: u64, s: &str) -> u64 {
+        for b in s.as_bytes() {
+            h ^= *b as u64;
+            h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        h
+    }
+    let mut h = 0xcbf2_9ce4_8422_2325u64;
+    for (_, sql) in DUCKDB_TABLES {
+        h = fnv(h, sql);
+    }
+    h = fnv(h, DUCKDB_EXTRAS);
+    format!("{h:016x}")
 }

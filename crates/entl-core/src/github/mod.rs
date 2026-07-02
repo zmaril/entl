@@ -14,6 +14,8 @@ use duckdb::types::{TimeUnit, Value};
 
 use crate::db::Db;
 use crate::ingest::compute_repo_id;
+use crate::stream::{ChangeBatch, ChangeOp, ChangeSink};
+use duckdb::arrow::record_batch::RecordBatch;
 
 mod actions;
 mod checks;
@@ -241,6 +243,12 @@ fn resolve_repo(path: &str) -> Result<Option<(String, String, String)>> {
     Ok(parse_owner_repo(&url).map(|(owner, name)| (owner, name, repo_id)))
 }
 
+/// The GitHub API base URL. `ENTL_GITHUB_API` overrides it (e.g. a localhost mock in the
+/// round-trip tests; see notes/design/testing.md); defaults to the real API.
+fn api_base() -> String {
+    std::env::var("ENTL_GITHUB_API").unwrap_or_else(|_| "https://api.github.com".to_string())
+}
+
 /// Token from `gh auth token`, then `GH_TOKEN` / `GITHUB_TOKEN`.
 fn resolve_token() -> Result<String> {
     if let Ok(out) = std::process::Command::new("gh")
@@ -278,6 +286,204 @@ pub fn ingest_github(db: &Db, path: &str) -> Result<GithubIngest> {
     rt.block_on(ingest_async(db, &owner, &name, &repo_id, token))
 }
 
+/// Ingest GitHub data, teeing the rows that changed this cycle into `sink` as
+/// Arrow change batches (notes/design/engine.md, "The change stream").
+///
+/// Emitted post-hoc from the store (no threading through the async sync): the
+/// top-level resources — `gh_pull_requests`/`gh_issues` (upsert, by `updated_at`
+/// watermark), `gh_events` (by `created_at`; the `id` is text, not orderable),
+/// `gh_workflow_runs`/`gh_check_runs` (bounded, cleared+refetched → replace) —
+/// plus the sub-resources of the PRs/issues that changed (reviews, commits,
+/// comments, labeled, review-comments, requested-reviewers) and the
+/// `gh_users`/`gh_labels` dims. Follow-ups: the Actions children
+/// (`gh_jobs`/`gh_steps`/…) and per-parent *delete* of removed sub-rows.
+pub fn ingest_github_streamed(
+    db: &Db,
+    path: &str,
+    sink: Option<&ChangeSink>,
+) -> Result<GithubIngest> {
+    let Some(sink) = sink else {
+        return ingest_github(db, path);
+    };
+    let Some((_, _, repo_id)) = resolve_repo(path)? else {
+        return ingest_github(db, path); // no github remote → normal (no-op) path
+    };
+
+    // Snapshot the deltas' lower bounds *before* the sync mutates the store.
+    let pr_wm = read_watermark(db, &format!("gh:prs:{repo_id}"))?;
+    let is_wm = read_watermark(db, &format!("gh:issues:{repo_id}"))?;
+    let ev_wm: Option<DateTime<Utc>> = {
+        let us: Option<i64> = db.conn.query_row(
+            "SELECT epoch_us(max(created_at)) FROM gh_events WHERE repo_id = ?",
+            params![repo_id],
+            |r| r.get(0),
+        )?;
+        us.and_then(DateTime::from_timestamp_micros)
+    };
+
+    let stats = ingest_github(db, path)?;
+
+    // Top-level resources.
+    emit_delta(db, sink, "gh_pull_requests", ChangeOp::Upsert, &repo_id, "updated_at", pr_wm)?;
+    emit_delta(db, sink, "gh_issues", ChangeOp::Upsert, &repo_id, "updated_at", is_wm)?;
+    emit_delta(db, sink, "gh_events", ChangeOp::Insert, &repo_id, "created_at", ev_wm)?;
+    emit_all(db, sink, "gh_workflow_runs", ChangeOp::Replace, &repo_id)?;
+    emit_all(db, sink, "gh_check_runs", ChangeOp::Replace, &repo_id)?;
+
+    // Sub-resources of the PRs/issues that changed this cycle. Upserted by natural
+    // key; per-parent *replace* (dropping sub-rows a PR no longer has, e.g. a
+    // deleted review) is a follow-up — the ingest deletes+reinserts, but this
+    // delta doesn't yet emit the deletions.
+    let changed_prs = changed_numbers(db, "gh_pull_requests", &repo_id, pr_wm)?;
+    let changed_issues = changed_numbers(db, "gh_issues", &repo_id, is_wm)?;
+    for table in ["gh_pr_reviews", "gh_pr_commits", "gh_requested_reviewers", "gh_review_comments"] {
+        emit_keys(db, sink, table, "pr_number", ChangeOp::Upsert, &repo_id, &changed_prs)?;
+    }
+    for table in ["gh_comments", "gh_labeled"] {
+        emit_subject(db, sink, table, ChangeOp::Upsert, &repo_id, "pr", &changed_prs)?;
+        emit_subject(db, sink, table, ChangeOp::Upsert, &repo_id, "issue", &changed_issues)?;
+    }
+    // Dim tables the above reference. `gh_users` is global (no repo_id); both are
+    // sent whole (not yet delta-optimized) so a sink always has the referents.
+    emit_all_global(db, sink, "gh_users", ChangeOp::Upsert)?;
+    emit_all(db, sink, "gh_labels", ChangeOp::Upsert, &repo_id)?;
+
+    Ok(stats)
+}
+
+/// Send each non-empty batch; stop early if the consumer has hung up.
+fn emit_batches(sink: &ChangeSink, table: &str, op: ChangeOp, batches: Vec<RecordBatch>) {
+    for b in batches {
+        if b.num_rows() > 0 && !sink.emit(ChangeBatch::new(table, op, b)) {
+            break;
+        }
+    }
+}
+
+/// Emit rows whose `col` advanced past the pre-sync watermark (all rows if none).
+fn emit_delta(
+    db: &Db,
+    sink: &ChangeSink,
+    table: &str,
+    op: ChangeOp,
+    repo_id: &str,
+    col: &str,
+    wm: Option<DateTime<Utc>>,
+) -> Result<()> {
+    let batches: Vec<RecordBatch> = if let Some(w) = wm {
+        let sql = format!("SELECT * FROM {table} WHERE repo_id = ? AND {col} > ?");
+        let mut stmt = db.conn.prepare(&sql)?;
+        stmt.query_arrow(params![
+            repo_id,
+            Value::Timestamp(TimeUnit::Microsecond, w.timestamp_micros())
+        ])?
+        .collect()
+    } else {
+        let sql = format!("SELECT * FROM {table} WHERE repo_id = ?");
+        let mut stmt = db.conn.prepare(&sql)?;
+        stmt.query_arrow(params![repo_id])?.collect()
+    };
+    emit_batches(sink, table, op, batches);
+    Ok(())
+}
+
+/// Emit the whole current set of a (bounded) table for this repo.
+fn emit_all(db: &Db, sink: &ChangeSink, table: &str, op: ChangeOp, repo_id: &str) -> Result<()> {
+    let sql = format!("SELECT * FROM {table} WHERE repo_id = ?");
+    let mut stmt = db.conn.prepare(&sql)?;
+    let batches: Vec<RecordBatch> = stmt.query_arrow(params![repo_id])?.collect();
+    emit_batches(sink, table, op, batches);
+    Ok(())
+}
+
+/// Emit a whole table that has no `repo_id` (global dim tables like `gh_users`).
+fn emit_all_global(db: &Db, sink: &ChangeSink, table: &str, op: ChangeOp) -> Result<()> {
+    let mut stmt = db.conn.prepare(&format!("SELECT * FROM {table}"))?;
+    let batches: Vec<RecordBatch> = stmt.query_arrow([])?.collect();
+    emit_batches(sink, table, op, batches);
+    Ok(())
+}
+
+/// The PR/issue `number`s whose watermark advanced (all of them if there's no
+/// prior watermark) — the parents whose sub-rows we (re)emit this cycle.
+fn changed_numbers(
+    db: &Db,
+    table: &str,
+    repo_id: &str,
+    wm: Option<DateTime<Utc>>,
+) -> Result<Vec<i32>> {
+    let out = if let Some(w) = wm {
+        let mut stmt = db.conn.prepare(&format!(
+            "SELECT number FROM {table} WHERE repo_id = ? AND updated_at > ?"
+        ))?;
+        stmt.query_map(
+            params![repo_id, Value::Timestamp(TimeUnit::Microsecond, w.timestamp_micros())],
+            |r| r.get::<_, i32>(0),
+        )?
+        .collect::<duckdb::Result<Vec<i32>>>()?
+    } else {
+        let mut stmt = db
+            .conn
+            .prepare(&format!("SELECT number FROM {table} WHERE repo_id = ?"))?;
+        stmt.query_map(params![repo_id], |r| r.get::<_, i32>(0))?
+            .collect::<duckdb::Result<Vec<i32>>>()?
+    };
+    Ok(out)
+}
+
+/// Emit a sub-table's rows for `key_col IN numbers` (chunked to bound the query).
+fn emit_keys(
+    db: &Db,
+    sink: &ChangeSink,
+    table: &str,
+    key_col: &str,
+    op: ChangeOp,
+    repo_id: &str,
+    numbers: &[i32],
+) -> Result<()> {
+    for chunk in numbers.chunks(500) {
+        let ph = std::iter::repeat("?").take(chunk.len()).collect::<Vec<_>>().join(", ");
+        let sql = format!("SELECT * FROM {table} WHERE repo_id = ? AND {key_col} IN ({ph})");
+        let mut stmt = db.conn.prepare(&sql)?;
+        let mut p: Vec<&dyn duckdb::ToSql> = Vec::with_capacity(chunk.len() + 1);
+        p.push(&repo_id);
+        for n in chunk {
+            p.push(n);
+        }
+        let batches: Vec<RecordBatch> = stmt.query_arrow(p.as_slice())?.collect();
+        emit_batches(sink, table, op, batches);
+    }
+    Ok(())
+}
+
+/// Emit a subject-keyed table (`gh_comments` / `gh_labeled`) for one subject type.
+fn emit_subject(
+    db: &Db,
+    sink: &ChangeSink,
+    table: &str,
+    op: ChangeOp,
+    repo_id: &str,
+    subject_type: &str,
+    numbers: &[i32],
+) -> Result<()> {
+    for chunk in numbers.chunks(500) {
+        let ph = std::iter::repeat("?").take(chunk.len()).collect::<Vec<_>>().join(", ");
+        let sql = format!(
+            "SELECT * FROM {table} WHERE repo_id = ? AND subject_type = ? AND subject_number IN ({ph})"
+        );
+        let mut stmt = db.conn.prepare(&sql)?;
+        let mut p: Vec<&dyn duckdb::ToSql> = Vec::with_capacity(chunk.len() + 2);
+        p.push(&repo_id);
+        p.push(&subject_type);
+        for n in chunk {
+            p.push(n);
+        }
+        let batches: Vec<RecordBatch> = stmt.query_arrow(p.as_slice())?.collect();
+        emit_batches(sink, table, op, batches);
+    }
+    Ok(())
+}
+
 async fn ingest_async(
     db: &Db,
     owner: &str,
@@ -285,19 +491,22 @@ async fn ingest_async(
     repo_id: &str,
     token: String,
 ) -> Result<GithubIngest> {
+    let base = api_base();
     let client = octocrab::Octocrab::builder()
         .personal_token(token)
+        .base_uri(base.clone())
+        .context("set github api base")?
         .build()
         .context("build octocrab client")?;
 
     let mut stats = GithubIngest::default();
     let mut users: Users = HashMap::new();
     let mut labels: Labels = HashMap::new();
-    let api = format!("https://api.github.com/repos/{owner}/{name}");
+    let api = format!("{base}/repos/{owner}/{name}");
 
     // Top-level signal: poll the event feed (also stored as an activity log). A 304
     // means the repo is idle → skip all per-resource syncs for free.
-    let active = events::sync_events(db, &client, owner, name, repo_id, &mut stats).await?;
+    let active = events::sync_events(db, &client, &base, owner, name, repo_id, &mut stats).await?;
     if !active {
         return Ok(stats);
     }
