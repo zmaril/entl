@@ -1,0 +1,15 @@
+[package]
+name = "entl-ruby"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Ruby (Magnus) binding: the entl engine, in-process in Ruby."
+
+[lib]
+# Ruby loads `entl.bundle`; the crate lib is `entl` so Magnus emits `Init_entl`.
+name = "entl"
+crate-type = ["cdylib"]
+
+[dependencies]
+magnus = "0.8"
+entl-core = { path = "../entl-core" }
