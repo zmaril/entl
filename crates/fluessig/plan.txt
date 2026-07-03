@@ -1,0 +1,99 @@
+fluessig — plan
+
+The canonical design is DESIGN.md (rationale, decisions §11, non-goals §8, derived artifacts §9).
+This is the actionable checklist, tracking DESIGN §7's build order. Spine-first: prove one full
+vertical (TypeSpec -> catalog.json -> SQL DDL + SQL data codec -> live store) before any fan-out.
+
+Shape: authored .tsp (+ @fluessig/typespec decorators) --tsp compile--> catalog.json (the contract)
+--> Rust core (loader/validator + codecs) reads catalog.json (serde), no Node at data time.
+Arrow is an import + data path. Mechanism proven in spike/ — ONE entl.tsp holds both layers; one
+compile emits catalog.json (model layer) AND api.json (op layer -> generated language bindings,
+cargo-check-proven; see spike/README.md + /translation.md).
+
+v1 authoring toolchain: `cargo install --git` for the binary + ambient Node for .tsp->catalog.json
+(fine for the entl dogfood). Bundled no-Node authoring binary = a later packaging milestone (§11.4).
+
+Legend: [ ] todo  [~] in progress  [x] done
+
+## Step 0 — @fluessig/typespec + @fluessig/emitter (TS, thin)
+
+[ ] Promote spike/ into a real package. The spike already uses the DESIGN §3 core vocabulary
+    (@entity, field-level @key, @edge(Struct), @compose) — add the rest: @card(min,max), @assoc,
+    @inverse, @name, @index/@unique/@default, per-codec namespaces (@Pg.*, @Mongo.*), plus the
+    binding-surface shapes (@ctor/@stream/@manual — see spike/gen.mjs and /translation.md).
+[ ] The emitter is a MINIMAL catalog printer: walk the checked program, serialize types + decorator
+    state verbatim -> catalog.json. NO validation / naming / projection logic in TS (all in Rust, §4).
+[ ] Freeze the catalog.json format with a JSON Schema + a fixture corpus. catalog.json is internal
+    (emitter + Rust core release in lockstep) but stays versioned (§11.3).
+
+## Step 1 — IR + loader/validator (Rust)
+
+[ ] ir::Type — Scalar(Text|I8..I64|U8..U64|F32|F64|Bool|Timestamp{unit,tz}|Date|Oid|Uuid|Bytes|
+    Decimal{p,s}|Json|Enum), Struct(ref), List(Type), Map(Type), Union(Type..). Our own enum.
+[ ] ir::Field, ir::Key (composite, ordered), ir::Entity.
+[ ] ir::Relation { to: OneOf<[EntityRef]> (1=plain, >1=polymorphic), cardinality{min,max},
+    kind(Composition|Association), properties: Option<StructRef>, ends{from,to}, inverse }.
+[ ] ir::Catalog + serde read of catalog.json + version check. Load the fixture corpus.
+[ ] ALL semantic validation in the loader (so every front-end shares it): composition rules
+    (single parent, no external @key, no cascade-in), edge-prop structs are value structs,
+    abstract-supertype families (uniform key type on the root; closed membership; leaves-only
+    instantiable; reject ad-hoc entity unions), key/relation-target checks. Span-carrying diagnostics.
+[ ] `fluessig validate`.
+
+## Step 2 — Arrow front-end (Layer A)
+
+[ ] Catalog::from_arrow (field-metadata convention fluessig.type="Oid"; documented-lossy: types
+    outside our enum map by rule or fail loudly) and Entity -> arrow::Schema. Round-trip test (A-subset).
+[ ] `fluessig import-arrow` -> emit a starter .tsp scaffold.
+
+## Step 3 — SQL DDL back-end (Postgres first)
+
+[ ] backend::sql::ddl(&Catalog, dialect). Scalars->pg types; Struct/List/Map->jsonb; Key->PK
+    (composite = declaration order); association to-one->FK; edge-prop relation->association table;
+    composition->child table or embedded json (codec option); polymorphic->(type,key) column pair.
+[ ] PARITY GATE: reproduce entl's commits / commit_parents(idx) / gh_* templates exactly (incl. the
+    edge table + composite keys) before deleting anything. Emit _fluessig_meta(catalog hash, versions).
+[ ] Minimal @derived: isMerge as @derived(exists, of: parents, where:{idx:1}) -> a virtual
+    <table>_derived view (§9.3 carve-out). exists/count only, no stored/triggers.
+[ ] Then SQLite + DuckDB dialects.
+
+## Step 4 — SQL data codec (Layer C; port the driver sink)
+
+[ ] Implement §5: Mutation{entity,op:Insert|Upsert|Delete,rows:RecordBatch} in a Transaction ->
+    a Plan of atomic Steps. v1 posture: SQL = one-step-transactional; append-only files reject
+    Upsert/Delete. Capability profiles built out as codecs need them (not up front).
+[ ] Upsert (ON CONFLICT), composition delete -> ON DELETE CASCADE on child tables; flat child
+    batches canonical (parent-key column); topological ordering within a Plan; strict/lenient coercion.
+[ ] Port entl driver.rs to read entity.key from the IR (delete parse_pk).
+
+## Step 5 — prove the vertical + dogfood entl
+
+[ ] End-to-end: catalog from .tsp -> DDL + Layer-C data into a live PGlite/Postgres -> read back ->
+    assert rows/types (reuse entl's sync.test.ts). Wire entl-core to fluessig; keep entl node/python
+    tests green. Stage entl redundancy removal (per-dialect templates, *_TABLES lists, BOOL_COLUMNS,
+    parse_pk) each behind a regenerates-identically test.
+
+## Step 6 — fan out (independent codecs vs the frozen IR)
+
+[ ] SQLite/DuckDB DDL -> Mermaid erDiagram (cheap docs win) -> ORM codegen -> Mongo (first real
+    Composition + (type,key) test; aggregate assembly at marshal time) -> JSONL/Parquet -> Proto -> graph.
+
+## Testing (cross-cutting, not a phase) — DESIGN §7 / §11.13
+
+[ ] Static/unit: loader+validator (accept valid, reject each rule with the right error) + per-codec
+    golden outputs.
+[ ] proptest: random VALID catalogs + random Arrow batches -> invariants (arrow-import round-trip;
+    Transaction->Plan->execute->read-back == input for transactional sinks).
+[ ] Cross-codec conformance corpus: one catalog through every codec. entl (incl. annotated tags ->
+    polymorphism) is the top-level property test.
+
+## Deferred / post-v1 (DESIGN §8, §9) — non-binding on the IR until built
+
+[ ] Mongo / ORM codegen / Proto / graph codecs; n-ary relations (ends reserves the slot); entity
+    inheritance beyond abstract roots; single-table inheritance projection (@Pg.singleTable).
+[ ] Derived family beyond isMerge: §9.1 representation views, §9.2 @closure, §9.4 derived to-one,
+    @derived stored + sink-side maintenance. Extras (§9.5) itself is v1 (fingerprinted).
+[ ] Migrations tiers 2/3 (defer to ORM tooling; real diff/ALTER later). Partial Update op w/ mask.
+[ ] Bundled no-Node authoring binary. Native Rust .tsp front-end (optional; catalog stays the input).
+[ ] SQL FK policy — decide during Step 3/4 with entl's real DDL + stream ordering in front of us
+    (provisional: deferred FKs on acyclic assoc / bare columns on cycles / cascade on composition).
