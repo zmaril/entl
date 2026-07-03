@@ -70,6 +70,10 @@ fn person(w: &mut Vec<u8>, kind: &str, (name, email, ts, tz): &(String, String, 
 /// index. HEAD is pointed at the first `refs/heads/*` ref so the repo is checkout-shaped.
 pub fn import(repo: &Path, commits: &[SnapCommit], refs: &[SnapRef]) -> Result<Vec<String>> {
     std::fs::create_dir_all(repo)?;
+    // Canonicalize to an absolute path: `git -C repo` runs with cwd=repo, so a *relative*
+    // `--export-marks` would be resolved against repo (double-nested) and we'd fail to read it.
+    let repo = std::fs::canonicalize(repo).context("canonicalize output repo")?;
+    let repo = repo.as_path();
     git(repo, &["init", "-q"])?;
     git(repo, &["config", "core.autocrlf", "false"])?;
 
