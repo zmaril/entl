@@ -29,5 +29,14 @@ t("cross-language P1 matrix (git tables) via Node", async () => {
     const e2 = new Entl(":memory:");
     await e2.sink(repo, { target: SinkTarget.Jsonl, path: jdir, github: false });
     expect(await e2.extract({ source: "jsonl", path: jdir })).toBe(expected);
+
+    // Postgres (gated) — a fresh schema per world
+    const pg = process.env.ENTL_TEST_PG;
+    if (pg) {
+      const schema = "m_" + name.replace(/[^a-z0-9_]/gi, "");
+      const e3 = new Entl(":memory:");
+      await e3.sink(repo, { target: SinkTarget.Postgres, path: pg, github: false, schema });
+      expect(await e3.extract({ source: "postgres", path: pg, schema })).toBe(expected);
+    }
   }
 });

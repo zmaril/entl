@@ -6,11 +6,13 @@ license.workspace = true
 description = "Python (PyO3) binding: the entl engine, in-process in Python."
 
 [lib]
-# The Python import name is `entl`; maturin packages this cdylib as the `entl` module.
-name = "entl"
+# The compiled extension is `entl._entl`; the pure-Python `python/entl/` package (mixed maturin
+# layout) re-exports it and adds the SQLAlchemy models.
+name = "_entl"
 crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = { version = "0.23", features = ["extension-module", "abi3-py39"] }
 entl-core = { path = "../entl-core" }
 anyhow = "1"
+serde_json = "1"

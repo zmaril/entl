@@ -559,9 +559,8 @@ fn rebuild_from_snapshot(snap: &Snapshot, repo: &Path) -> Result<Vec<String>>
 
 ### `rebuild_from_store`
 
-Extract the git tables from a store and rebuild a repo at `out`. `dest` is the store location
-(DuckDB/SQLite file, JSONL dir, or Postgres URL); `schema` is the Postgres schema (default
-`entl`).
+Extract the git tables from a sink store and rebuild a repo at `out`. `dest` is the store
+location (SQLite file, JSONL dir, or Postgres URL); `schema` is the Postgres schema.
 
 ```rust
 fn rebuild_from_store(
@@ -570,6 +569,15 @@ fn rebuild_from_store(
     schema: Option<&str>,
     out: &Path,
 ) -> Result<Vec<String>>
+```
+
+### `rebuild_store`
+
+Rebuild a repo from any store named by string: `duckdb` | `sqlite` | `jsonl` | `postgres`.
+The shared entry for the CLI and the language bindings.
+
+```rust
+fn rebuild_store(from: &str, dest: &str, schema: Option<&str>, out: &Path) -> Result<Vec<String>>
 ```
 
 ### `drain`

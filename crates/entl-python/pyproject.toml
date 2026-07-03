@@ -15,3 +15,10 @@ classifiers = [
 [tool.maturin]
 # Build the crate as a CPython extension module (stable ABI via abi3).
 features = ["pyo3/extension-module"]
+# Mixed layout: the Rust ext (`entl._entl`) + the pure-Python `python/entl/` package (models).
+python-source = "python"
+module-name = "entl._entl"
+
+[project.optional-dependencies]
+# The SQLAlchemy read-plane models (entl.models) need SQLAlchemy; the engine itself does not.
+orm = ["sqlalchemy>=2.0"]

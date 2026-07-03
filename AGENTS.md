@@ -20,9 +20,12 @@ crates/entl-core     the engine (Rust). Write path uses the raw duckdb crate; sc
                      hand-written SQL migrations. Sync, no async.
 crates/entl-cli      the CLI (init/load/watch/analysis/query/tables).
 crates/entl-node     napi bindings: the engine in-process in Node/Bun. Async lives here
-                     (AsyncTask → Promise). Also the PGlite/Postgres sink (sync.ts).
-crates/entl-python   PyO3 bindings (built via maturin): the engine in-process in CPython.
-                     Async is the GIL released via allow_threads. Mirrors entl-node's surface.
+                     (AsyncTask → Promise). sync.ts is a thin executor over the core driver
+                     sink (entl.driverPlan()) — mirrors into PGlite/Postgres.
+crates/entl-python   PyO3 bindings (built via maturin, mixed layout): the engine in-process in
+                     CPython (`entl._entl`) + `entl.models` (generated SQLAlchemy read-plane —
+                     read-only; create_all/drop_all are guarded, the sink owns the schema).
+crates/entl-ruby     Magnus bindings: the engine in-process in Ruby (rb_sys/rake-compiler build).
 site/                the docs site (Fumadocs — Next.js + MDX, static export). See notes/design/docs.md.
 notes/               design docs.
 ```
@@ -46,7 +49,15 @@ uv venv && uv pip install maturin pytest
 # stale .so after a rebuild). The forward-compat flag: the local interpreter (3.14) is newer
 # than pyo3's known-max; abi3 makes the wheel forward-compatible. Drop it once pyo3 catches up.
 PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 .venv/bin/maturin develop
-.venv/bin/python -m pytest tests/   # sink() a repo into a temp SQLite, assert idempotent counts
+python gen_models.py                # regenerate entl.models (SQLAlchemy) from the schema
+uv pip install sqlalchemy           # the `orm` extra, for entl.models + its test
+.venv/bin/python -m pytest tests/   # sink/extract/rebuild/matrix + the SQLAlchemy models
+
+# the Ruby addon (Magnus, rb_sys). Needs a Ruby 3.x/4.x + LIBCLANG_PATH → arm64 libclang.
+cd crates/entl-ruby
+gem install rb_sys minitest
+LIBCLANG_PATH=/Library/Developer/CommandLineTools/usr/lib ruby extconf.rb && make
+ruby -I. -Itest test/test_entl.rb   # Entl.new / sink / query / extract
 
 # the CLI: pull a repo and sync into a target DB (sqlite / jsonl / postgres)
 ./target/release/entl sink ./some-repo --to sqlite   --dest out.db
@@ -74,6 +85,9 @@ cd site && bun install
 bun run dev                      # dev server, localhost:3000
 bun run build                    # static export → site/out  (prebuild runs `gen`)
 bun run gen                      # regenerate the reference pages from source
+bun test examples.test.ts        # RUN every code block in guides/cookbook.mdx against a fixture
+                                 # repo, so docs can't drift. Needs the CLI (`cargo build --release`),
+                                 # the napi addon, and the python venv built first.
 ```
 
 **After changing `entl-core`**, rebuild the consumers to see the change: the napi addon

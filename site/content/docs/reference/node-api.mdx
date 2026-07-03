@@ -45,6 +45,17 @@ class Entl {
    */
   extract(options: ExtractOptions): Promise<string>
   /**
+   * Stream the change batches from one pull of `repoPath` (the "stream plane"). Returns a
+   * `Changes` handle; call `.next()` for each `{table, op, rows}` batch until it yields `null`.
+   * A background thread runs the pull and feeds the stream (backpressured).
+   */
+  changes(repoPath: string, options?: ChangesOptions | undefined | null): Changes
+  /**
+   * Reconstruct a git repo from a store into `options.out` → `Promise<number>` (commits
+   * rebuilt). Needs the store to have been sunk with `objects: true`. Off the JS thread.
+   */
+  rebuild(options: RebuildOptions): Promise<number>
+  /**
    * Watch `repoPath`: on a background thread, every `intervalSecs`, `git fetch`
    * + load git + load GitHub into the DB, then call `onSync(stats)` so the JS
    * side can mirror into PGlite (whose `live` then drives realtime). Returns a
@@ -206,6 +217,23 @@ interface ExtractOptions {
 }
 ```
 
+### `RebuildOptions`
+
+Options for `Entl.rebuild()`.
+
+```ts
+interface RebuildOptions {
+  /** Source store: `duckdb` | `sqlite` | `jsonl` | `postgres`. */
+  from: string
+  /** The store location (file / directory / Postgres URL). */
+  dest: string
+  /** Output directory for the reconstructed repo. */
+  out: string
+  /** Postgres schema (default "entl"). */
+  schema?: string
+}
+```
+
 ### `SyncStats`
 
 The payload passed to the `watch` callback after each sync cycle.
@@ -218,6 +246,30 @@ interface SyncStats {
   pullRequests: number
   issues: number
   workflowRuns: number
+}
+```
+
+### `ChangesOptions`
+
+Options for `Entl.changes()`.
+
+```ts
+interface ChangesOptions {
+  /** Also stream GitHub changes (needs a token). Default false. */
+  github?: boolean
+  /** Also stream the object graph (trees/blobs). Default false. */
+  objects?: boolean
+}
+```
+
+### `Changes`
+
+A live change stream from one pull — the design's "stream plane". `next()` resolves to the next change batch (`{table, op, rows}` JSON) or `null` when the pull is done. Dress it as an async iterator in JS: `for await (const b of iterate(entl.changes(repo))) { … }`.
+
+```ts
+class Changes {
+  /** The next change batch as JSON (`{table, op, rows}`), or `null` when the stream ends. */
+  next(): Promise<string | null>
 }
 ```
 

@@ -33,3 +33,11 @@ def test_cross_language_matrix():
         e2 = entl.Entl(":memory:")
         e2.sink(repo, entl.SinkTarget.Jsonl, path=jd, github=False)
         assert e2.extract("jsonl", jd) == expected, f"{name} jsonl"
+
+        # Postgres (gated) — a fresh schema per world
+        pg = os.environ.get("ENTL_TEST_PG")
+        if pg:
+            schema = "m_" + "".join(c for c in name if c.isalnum() or c == "_")
+            e3 = entl.Entl(":memory:")
+            e3.sink(repo, entl.SinkTarget.Postgres, path=pg, github=False, schema=schema)
+            assert e3.extract("postgres", pg, schema=schema) == expected, f"{name} postgres"

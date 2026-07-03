@@ -195,9 +195,8 @@ fn expand_tree(
     Ok(())
 }
 
-/// Extract the git tables from a store and rebuild a repo at `out`. `dest` is the store location
-/// (DuckDB/SQLite file, JSONL dir, or Postgres URL); `schema` is the Postgres schema (default
-/// `entl`).
+/// Extract the git tables from a sink store and rebuild a repo at `out`. `dest` is the store
+/// location (SQLite file, JSONL dir, or Postgres URL); `schema` is the Postgres schema.
 pub fn rebuild_from_store(
     target: SinkTarget,
     dest: &str,
@@ -214,4 +213,16 @@ pub fn rebuild_from_store(
         }
     };
     rebuild_from_snapshot(&snap, out)
+}
+
+/// Rebuild a repo from any store named by string: `duckdb` | `sqlite` | `jsonl` | `postgres`.
+/// The shared entry for the CLI and the language bindings.
+pub fn rebuild_store(from: &str, dest: &str, schema: Option<&str>, out: &Path) -> Result<Vec<String>> {
+    if from == "duckdb" {
+        let d = crate::db::Db::open(dest)?;
+        let snap = crate::extract::extract_duckdb(&d.conn, GIT_FULL_TABLES)?;
+        rebuild_from_snapshot(&snap, out)
+    } else {
+        rebuild_from_store(from.parse()?, dest, schema, out)
+    }
 }

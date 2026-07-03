@@ -37,11 +37,18 @@ tables — the same [schema](/docs/reference/schema), one `SELECT` away.
 | `rename` | — | Override the target table name per Entl table |
 | `schema` | `"entl"` | Target Postgres schema |
 
-## Coverage & realtime
+## How it works
 
-- **Coverage is derived from Entl's own schema** by introspection — so it covers every table
-  by construction and can't silently drift (a coverage test guards it in CI).
+`syncInto` is a thin executor. The DDL, the type mapping, the `ON CONFLICT` upserts and the
+blob→hex projection are all generated in **Rust core** (the `DriverSink`) and streamed to the JS
+side as `{ sql, params }` statements — this function just runs each one against `pg`. So the exact
+same mirror is available to every binding, and only the final `pg.query(sql, params)` stays in
+JavaScript.
+
+- **Coverage is derived from Entl's own schema** — the plan emits a typed `CREATE TABLE` (with the
+  real primary key) for every mirrored table, so it can't silently drift.
 - **BLOB** columns (git oids) are projected to **hex text** on the Postgres side.
+- The plan is **backpressured** (bounded), so mirroring a huge repo never buffers it all in memory.
 - Once rows land in PGlite, its **`live`** extension turns inserts/updates into realtime —
   no extra streaming API to build.
 

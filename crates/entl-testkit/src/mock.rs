@@ -103,11 +103,99 @@ fn route(method: &Method, url: &str, body: &str, s: &Served) -> Value {
                 events(s)
             }
         }
-        Method::Get if path.ends_with("/actions/workflows") => json!({ "total_count": 0, "workflows": [] }),
-        Method::Get if path.ends_with("/actions/runs") => json!({ "total_count": 0, "workflow_runs": [] }),
+        Method::Get if path.ends_with("/actions/workflows") => json!({
+            "total_count": s.world.workflows.len(),
+            "workflows": s.world.workflows.iter().map(workflow_json).collect::<Vec<_>>(),
+        }),
+        Method::Get if path.ends_with("/actions/runs") => json!({
+            "total_count": s.world.runs.len(),
+            "workflow_runs": s.world.runs.iter().map(|r| run_json(r, s)).collect::<Vec<_>>(),
+        }),
+        Method::Get if path.ends_with("/jobs") && path.contains("/actions/runs/") => {
+            let run = between(path, "/actions/runs/", "/jobs")
+                .and_then(|id| id.parse::<i64>().ok())
+                .and_then(|id| s.world.runs.iter().find(|r| r.id == id));
+            let jobs: Vec<Value> = run.map(|r| r.jobs.iter().map(|j| job_json(j, r, s)).collect()).unwrap_or_default();
+            json!({ "total_count": jobs.len(), "jobs": Value::Array(jobs) })
+        }
+        Method::Get if path.ends_with("/check-runs") => {
+            let sha = between(path, "/commits/", "/check-runs").unwrap_or("");
+            let runs: Vec<Value> = s.world.checks.iter()
+                .filter(|c| oid(c.commit, s) == sha)
+                .map(|c| check_json(c, s)).collect();
+            json!({ "total_count": runs.len(), "check_runs": runs })
+        }
+        Method::Get if path.ends_with("/statuses") => {
+            let sha = between(path, "/commits/", "/statuses").unwrap_or("");
+            // The statuses REST endpoint returns a bare array (octocrab Page).
+            Value::Array(s.world.statuses.iter().filter(|st| oid(st.commit, s) == sha).map(status_json).collect())
+        }
         // pulls/issues REST are only used as etag gates (body ignored).
         _ => json!([]),
     }
+}
+
+/// The path segment between `before` and `after` (for `/runs/{id}/jobs`, `/commits/{sha}/…`).
+fn between<'a>(path: &'a str, before: &str, after: &str) -> Option<&'a str> {
+    let start = path.find(before)? + before.len();
+    let rest = &path[start..];
+    let end = rest.find(after)?;
+    Some(&rest[..end])
+}
+
+// A dummy but valid URL for the many required octocrab URL fields the ingest never reads.
+const URL: &str = "https://example.com/x";
+const TS: &str = "2020-01-01T00:00:00Z";
+
+fn workflow_json(w: &crate::forge::GhWorkflow) -> Value {
+    json!({
+        "id": w.id, "node_id": format!("W{}", w.id), "name": w.name, "path": w.path,
+        "state": w.state, "created_at": TS, "updated_at": TS,
+        "url": URL, "html_url": URL, "badge_url": URL,
+    })
+}
+
+fn run_json(r: &crate::forge::GhRun, s: &Served) -> Value {
+    let sha = oid(r.head_commit, s);
+    json!({
+        "id": r.id, "workflow_id": r.workflow_id, "node_id": format!("R{}", r.id),
+        "name": format!("run {}", r.id), "head_branch": r.head_branch, "head_sha": sha,
+        "run_number": r.run_number, "event": r.event, "status": r.status, "conclusion": r.conclusion,
+        "created_at": TS, "updated_at": TS,
+        "url": URL, "html_url": URL, "jobs_url": URL, "logs_url": URL, "check_suite_url": URL,
+        "artifacts_url": URL, "cancel_url": URL, "rerun_url": URL, "workflow_url": URL,
+        "head_commit": { "id": sha, "tree_id": sha, "message": "m", "timestamp": TS,
+                         "author": { "name": "a" }, "committer": { "name": "c" } },
+        "repository": { "id": 1, "name": "widget", "url": URL },
+    })
+}
+
+fn job_json(j: &crate::forge::GhJob, r: &crate::forge::GhRun, s: &Served) -> Value {
+    json!({
+        "id": j.id, "run_id": r.id, "workflow_name": "wf", "head_branch": r.head_branch,
+        "run_url": URL, "run_attempt": 1, "node_id": format!("J{}", j.id), "head_sha": oid(r.head_commit, s),
+        "url": URL, "html_url": URL, "status": j.status, "conclusion": j.conclusion,
+        "created_at": TS, "started_at": TS, "completed_at": Value::Null, "name": j.name,
+        "steps": j.steps.iter().map(|st| json!({
+            "name": st.name, "status": st.status, "number": st.number, "conclusion": st.conclusion,
+        })).collect::<Vec<_>>(),
+        "check_run_url": URL, "labels": [], "runner_name": j.runner_name,
+    })
+}
+
+fn check_json(c: &crate::forge::GhCheck, s: &Served) -> Value {
+    json!({
+        "id": c.id, "node_id": format!("K{}", c.id), "head_sha": oid(c.commit, s), "url": URL,
+        "output": { "annotations_count": 0, "annotations_url": URL },
+        "name": c.name, "pull_requests": [], "conclusion": c.conclusion,
+    })
+}
+
+fn status_json(st: &crate::forge::GhStatus) -> Value {
+    json!({
+        "id": st.id, "state": st.state, "context": st.context, "description": st.description,
+        "target_url": st.target_url, "created_at": TS,
+    })
 }
 
 fn page(url: &str) -> u32 {

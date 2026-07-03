@@ -367,6 +367,38 @@ impl Task for ExtractTask {
     }
 }
 
+/// Options for `Entl.rebuild()`.
+#[napi(object)]
+pub struct RebuildOptions {
+    /// Source store: `duckdb` | `sqlite` | `jsonl` | `postgres`.
+    pub from: String,
+    /// The store location (file / directory / Postgres URL).
+    pub dest: String,
+    /// Output directory for the reconstructed repo.
+    pub out: String,
+    /// Postgres schema (default "entl").
+    pub schema: Option<String>,
+}
+
+pub struct RebuildTask {
+    from: String,
+    dest: String,
+    out: String,
+    schema: Option<String>,
+}
+impl Task for RebuildTask {
+    type Output = usize;
+    type JsValue = i64;
+    fn compute(&mut self) -> Result<usize> {
+        entl_core::rebuild_store(&self.from, &self.dest, self.schema.as_deref(), std::path::Path::new(&self.out))
+            .map(|oids| oids.len())
+            .map_err(err)
+    }
+    fn resolve(&mut self, _env: Env, output: usize) -> Result<i64> {
+        Ok(output as i64)
+    }
+}
+
 pub struct LoadGitTask {
     db: Db,
     repo_path: String,
@@ -431,6 +463,114 @@ pub struct SyncStats {
     pub pull_requests: i64,
     pub issues: i64,
     pub workflow_runs: i64,
+}
+
+/// A live change stream from one pull — the design's "stream plane". `next()` resolves to the
+/// next change batch (`{table, op, rows}` JSON) or `null` when the pull is done. Dress it as an
+/// async iterator in JS: `for await (const b of iterate(entl.changes(repo))) { … }`.
+#[napi]
+pub struct Changes {
+    stream: Arc<entl_core::ChangeStream>,
+}
+
+pub struct NextChangeTask {
+    stream: Arc<entl_core::ChangeStream>,
+}
+impl Task for NextChangeTask {
+    type Output = Option<String>;
+    type JsValue = Option<String>;
+    fn compute(&mut self) -> Result<Option<String>> {
+        loop {
+            match self.stream.poll(Duration::from_millis(500)) {
+                entl_core::Poll::Batch(b) => {
+                    let out = serde_json::json!({
+                        "table": b.table,
+                        "op": b.op.as_str(),
+                        "rows": entl_core::sink::batch_to_json(&b),
+                    });
+                    return serde_json::to_string(&out).map(Some).map_err(err);
+                }
+                entl_core::Poll::Idle => continue,
+                entl_core::Poll::Closed => return Ok(None),
+            }
+        }
+    }
+    fn resolve(&mut self, _env: Env, o: Option<String>) -> Result<Option<String>> {
+        Ok(o)
+    }
+}
+
+#[napi]
+impl Changes {
+    /// The next change batch as JSON (`{table, op, rows}`), or `null` when the stream ends.
+    #[napi(ts_return_type = "Promise<string | null>")]
+    pub fn next(&self) -> AsyncTask<NextChangeTask> {
+        AsyncTask::new(NextChangeTask { stream: self.stream.clone() })
+    }
+}
+
+/// A driver-sink statement plan — the "mirror into a database entl-core doesn't link" surface
+/// (notes/design/multidb.md). All the DDL / type-mapping / upsert logic lives in Rust core
+/// (`DriverSink`); this streams the resulting `{sql, params}` statements so the JS side only
+/// executes them against its own client (e.g. PGlite: `await pg.query(sql, params)`). `next()`
+/// resolves to the next statement or `null` when the plan is complete.
+#[napi]
+pub struct DriverPlan {
+    stream: Arc<entl_core::StatementStream>,
+}
+
+pub struct NextStmtTask {
+    stream: Arc<entl_core::StatementStream>,
+}
+impl Task for NextStmtTask {
+    type Output = Option<String>;
+    type JsValue = Option<String>;
+    fn compute(&mut self) -> Result<Option<String>> {
+        loop {
+            match self.stream.poll(Duration::from_millis(500)) {
+                entl_core::StmtPoll::Statement(s) => {
+                    let out = serde_json::json!({ "sql": s.sql, "params": s.params, "table": s.table });
+                    return serde_json::to_string(&out).map(Some).map_err(err);
+                }
+                entl_core::StmtPoll::Idle => continue,
+                entl_core::StmtPoll::Closed => return Ok(None),
+            }
+        }
+    }
+    fn resolve(&mut self, _env: Env, o: Option<String>) -> Result<Option<String>> {
+        Ok(o)
+    }
+}
+
+#[napi]
+impl DriverPlan {
+    /// The next statement as JSON (`{sql, params}`), or `null` when the plan is complete.
+    #[napi(ts_return_type = "Promise<string | null>")]
+    pub fn next(&self) -> AsyncTask<NextStmtTask> {
+        AsyncTask::new(NextStmtTask { stream: self.stream.clone() })
+    }
+}
+
+/// Options for `Entl.driverPlan()`.
+#[napi(object)]
+pub struct DriverPlanOptions {
+    /// Only mirror these tables (default: all Postgres-eligible tables).
+    pub tables: Option<Vec<String>>,
+    /// Skip these tables.
+    pub exclude: Option<Vec<String>>,
+    /// Rename tables at the target.
+    pub rename: Option<Vec<TableRename>>,
+    /// Target schema (default "entl").
+    pub schema: Option<String>,
+}
+
+/// Options for `Entl.changes()`.
+#[napi(object)]
+pub struct ChangesOptions {
+    /// Also stream GitHub changes (needs a token). Default false.
+    pub github: Option<bool>,
+    /// Also stream the object graph (trees/blobs). Default false.
+    pub objects: Option<bool>,
 }
 
 /// Handle to a running `watch` loop. Call `stop()` to end it.
@@ -531,6 +671,79 @@ impl Entl {
             source: options.source,
             path: options.path,
             tables,
+            schema: options.schema,
+        })
+    }
+
+    /// Stream the change batches from one pull of `repoPath` (the "stream plane"). Returns a
+    /// `Changes` handle; call `.next()` for each `{table, op, rows}` batch until it yields `null`.
+    /// A background thread runs the pull and feeds the stream (backpressured).
+    #[napi]
+    pub fn changes(&self, repo_path: String, options: Option<ChangesOptions>) -> Result<Changes> {
+        let (sink, stream) = entl_core::change_channel(256);
+        let db = Db::from_conn(self.db.conn.try_clone().map_err(err)?);
+        let github = options.as_ref().and_then(|o| o.github).unwrap_or(false);
+        let objects = options.as_ref().and_then(|o| o.objects).unwrap_or(false);
+        std::thread::spawn(move || {
+            let counter = AtomicU64::new(0);
+            let _ = entl_core::ingest_git_streamed(&db, &repo_path, &counter, Some(&sink));
+            if objects {
+                let _ = entl_core::ingest_git_objects(&db, &repo_path, Some(&sink));
+            }
+            if github {
+                let _ = entl_core::ingest_github_streamed(&db, &repo_path, Some(&sink));
+            }
+            drop(sink); // closes the stream → next() resolves null
+        });
+        Ok(Changes { stream: Arc::new(stream) })
+    }
+
+    /// Backfill this handle's DuckDB store into a **driver** target — a database entl-core doesn't
+    /// link (PGlite, or any client you hold). Returns a `DriverPlan`; call `.next()` for each
+    /// `{sql, params}` statement and run it against your client until it yields `null`. The DDL,
+    /// type mapping and upserts are all generated in Rust (`DriverSink`) — the JS side only
+    /// executes. A background thread reads the store and feeds the plan (backpressured).
+    #[napi]
+    pub fn driver_plan(&self, options: Option<DriverPlanOptions>) -> Result<DriverPlan> {
+        let opts = options.unwrap_or(DriverPlanOptions {
+            tables: None,
+            exclude: None,
+            rename: None,
+            schema: None,
+        });
+        let select = entl_core::SinkSelect {
+            tables: opts.tables.clone(),
+            exclude: opts.exclude.clone().unwrap_or_default(),
+            rename: opts
+                .rename
+                .as_ref()
+                .map(|rs| rs.iter().map(|r| (r.from.clone(), r.to.clone())).collect())
+                .unwrap_or_default(),
+            schema: opts.schema.clone(),
+        };
+        let (tx, stream) = entl_core::statement_channel(256);
+        let db = Db::from_conn(self.db.conn.try_clone().map_err(err)?);
+        std::thread::spawn(move || {
+            let mut sink = entl_core::DriverSink::new(
+                move |s| tx.send(s).map_err(|_| anyhow::anyhow!("driver plan consumer dropped")),
+                entl_core::Dialect::Postgres,
+                select,
+            );
+            let tables = entl_core::driver_tables();
+            let _ = entl_core::backfill(&db.conn, &mut sink, &tables);
+            // `tx` drops here → the plan stream closes → next() resolves null.
+        });
+        Ok(DriverPlan { stream: Arc::new(stream) })
+    }
+
+    /// Reconstruct a git repo from a store into `options.out` → `Promise<number>` (commits
+    /// rebuilt). Needs the store to have been sunk with `objects: true`. Off the JS thread.
+    #[napi(ts_return_type = "Promise<number>")]
+    pub fn rebuild(&self, options: RebuildOptions) -> AsyncTask<RebuildTask> {
+        AsyncTask::new(RebuildTask {
+            from: options.from,
+            dest: options.dest,
+            out: options.out,
             schema: options.schema,
         })
     }

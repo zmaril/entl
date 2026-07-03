@@ -8,7 +8,7 @@ description: The Entl command-line interface — generated from its --help outpu
 # CLI
 
 ```text
-git + GitHub data in DuckDB
+pull git + forge activity into queryable data
 
 Usage: entl <COMMAND>
 
@@ -16,6 +16,9 @@ Commands:
   init      Create/open the DB and apply migrations
   load      Load git history + GitHub data into the DB (one-way, incremental)
   watch     Run continuously: fetch + load git on ref changes + GitHub on a timer
+  sink      Pull a repo and sync it into a target database (sqlite / jsonl / postgres)
+  rebuild   Reconstruct a git repo from a store (requires it was sunk with `--objects`)
+  extract   Read a store back into canonical rows (JSON), the reverse of `sink`
   analysis  Run an analysis over already-loaded data
   query     Run a SQL query and print the result
   tables    List the tables in the DB
@@ -72,6 +75,7 @@ Arguments:
 Options:
       --db <DB>              [default: entl.duckdb]
       --interval <INTERVAL>  GitHub poll interval in seconds [default: 60]
+      --stream               Emit change batches as NDJSON on stdout (the stream plane)
   -h, --help                 Print help
 ```
 

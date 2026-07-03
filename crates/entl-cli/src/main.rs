@@ -106,6 +106,21 @@ enum Cmd {
         #[arg(long)]
         schema: Option<String>,
     },
+    /// Read a store back into canonical rows (JSON), the reverse of `sink`.
+    Extract {
+        /// Source store: duckdb | sqlite | jsonl | postgres.
+        #[arg(long)]
+        from: String,
+        /// Store location: DuckDB/SQLite file, JSONL directory, or Postgres URL.
+        #[arg(long)]
+        dest: String,
+        /// Which tables to read (comma-separated). Default: the git tables.
+        #[arg(long, value_delimiter = ',')]
+        tables: Vec<String>,
+        /// Postgres schema (default "entl").
+        #[arg(long)]
+        schema: Option<String>,
+    },
     /// Run an analysis over already-loaded data.
     Analysis {
         #[command(subcommand)]
@@ -192,16 +207,17 @@ fn main() -> Result<()> {
             run_sink(&path, &to, &dest, &db, tables, exclude, renames, schema, no_github, objects)?;
         }
         Cmd::Rebuild { from, dest, out, schema } => {
-            let outp = Path::new(&out);
-            let oids = if from == "duckdb" {
-                let d = Db::open(&dest)?;
-                let snap = entl_core::extract_duckdb(&d.conn, entl_core::extract::GIT_FULL_TABLES)?;
-                entl_core::rebuild_from_snapshot(&snap, outp)?
-            } else {
-                let target: entl_core::SinkTarget = from.parse()?;
-                entl_core::rebuild_from_store(target, &dest, schema.as_deref(), outp)?
-            };
+            let oids = entl_core::rebuild_store(&from, &dest, schema.as_deref(), Path::new(&out))?;
             eprintln!("rebuilt {} commits → {out}", oids.len());
+        }
+        Cmd::Extract { from, dest, tables, schema } => {
+            let tables: Vec<String> = if tables.is_empty() {
+                entl_core::extract::GIT_TABLES.iter().map(|s| s.to_string()).collect()
+            } else {
+                tables
+            };
+            let json = entl_core::extract_json(&from, &dest, &tables, schema.as_deref())?;
+            println!("{json}");
         }
         Cmd::Analysis { cmd } => match cmd {
             AnalysisCmd::MergeConflicts { path, db } => {

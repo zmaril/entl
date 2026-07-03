@@ -110,6 +110,69 @@ pub struct GhEvent {
     pub payload: serde_json::Value,
 }
 
+/// An Actions workflow.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GhWorkflow {
+    pub id: i64,
+    pub name: String,
+    pub path: String,
+    pub state: String,
+}
+
+/// A workflow-run step.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GhStep {
+    pub number: i64,
+    pub name: String,
+    pub status: String,
+    pub conclusion: Option<String>,
+}
+
+/// A workflow-run job (+ steps).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GhJob {
+    pub id: i64,
+    pub name: String,
+    pub status: String,
+    pub conclusion: Option<String>,
+    pub runner_name: Option<String>,
+    pub steps: Vec<GhStep>,
+}
+
+/// A workflow run (its `head_commit` is a git commit index).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GhRun {
+    pub id: i64,
+    pub workflow_id: i64,
+    pub head_commit: usize,
+    pub head_branch: String,
+    pub event: String,
+    pub status: String,
+    pub conclusion: Option<String>,
+    pub run_number: i64,
+    pub jobs: Vec<GhJob>,
+}
+
+/// A check run for a commit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GhCheck {
+    pub id: i64,
+    pub commit: usize,
+    pub name: String,
+    pub conclusion: Option<String>,
+}
+
+/// A commit status.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GhStatus {
+    pub id: i64,
+    pub commit: usize,
+    pub context: Option<String>,
+    pub state: String,
+    pub description: Option<String>,
+    pub target_url: Option<String>,
+}
+
 /// A generated GitHub state. `users`/`labels` are pools indexed by the resources above; commit
 /// references are indices into the git world's commits (resolved to OIDs by the mock).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -121,4 +184,8 @@ pub struct ForgeWorld {
     pub pulls: Vec<GhPull>,
     pub issues: Vec<GhIssue>,
     pub events: Vec<GhEvent>,
+    pub workflows: Vec<GhWorkflow>,
+    pub runs: Vec<GhRun>,
+    pub checks: Vec<GhCheck>,
+    pub statuses: Vec<GhStatus>,
 }
