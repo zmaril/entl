@@ -143,6 +143,73 @@ impl Entl {
         py.allow_threads(move || entl_core::extract_json(&source, &dest, &tables, schema.as_deref()))
             .map_err(err)
     }
+
+    /// Reconstruct a git repo from a store into `out`; returns the number of commits rebuilt.
+    /// Needs the store to have been sunk with `objects=True`. `source` is
+    /// `duckdb`|`sqlite`|`jsonl`|`postgres`.
+    #[pyo3(signature = (source, dest, out, schema=None))]
+    fn rebuild(&self, py: Python<'_>, source: String, dest: String, out: String, schema: Option<String>) -> PyResult<usize> {
+        py.allow_threads(move || {
+            entl_core::rebuild_store(&source, &dest, schema.as_deref(), std::path::Path::new(&out))
+                .map(|oids| oids.len())
+        })
+        .map_err(err)
+    }
+
+    /// Stream the change batches from one pull of `repo` (the "stream plane") as an iterator of
+    /// JSON strings (`{"table":…, "op":…, "rows":[…]}`), one per batch. A background thread runs
+    /// the pull and feeds the stream. `for batch in e.changes(repo): ...`
+    #[pyo3(signature = (repo, github=false, objects=false))]
+    fn changes(&self, repo: String, github: bool, objects: bool) -> PyResult<Changes> {
+        let (sink, stream) = entl_core::change_channel(256);
+        let db = Db::from_conn(self.db.conn.try_clone().map_err(err)?);
+        std::thread::spawn(move || {
+            let counter = AtomicU64::new(0);
+            let _ = entl_core::ingest_git_streamed(&db, &repo, &counter, Some(&sink));
+            if objects {
+                let _ = entl_core::ingest_git_objects(&db, &repo, Some(&sink));
+            }
+            if github {
+                let _ = entl_core::ingest_github_streamed(&db, &repo, Some(&sink));
+            }
+            drop(sink); // closes the stream → the iterator ends
+        });
+        Ok(Changes { stream: std::sync::Arc::new(stream) })
+    }
+}
+
+/// An iterator over one pull's change batches (the "stream plane"). Yields a JSON string per batch.
+#[pyclass(unsendable)]
+pub struct Changes {
+    stream: std::sync::Arc<entl_core::ChangeStream>,
+}
+
+#[pymethods]
+impl Changes {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        let stream = self.stream.clone();
+        let batch = py.allow_threads(move || loop {
+            match stream.poll(std::time::Duration::from_millis(500)) {
+                entl_core::Poll::Batch(b) => {
+                    return Some(serde_json::json!({
+                        "table": b.table,
+                        "op": b.op.as_str(),
+                        "rows": entl_core::sink::batch_to_json(&b),
+                    }))
+                }
+                entl_core::Poll::Idle => continue,
+                entl_core::Poll::Closed => return None,
+            }
+        });
+        match batch {
+            Some(v) => Ok(Some(serde_json::to_string(&v).map_err(err)?)),
+            None => Ok(None),
+        }
+    }
 }
 
 fn git_dict<'py>(py: Python<'py>, g: &GitIngest) -> PyResult<Bound<'py, PyDict>> {
@@ -184,8 +251,9 @@ fn outcome_dict<'py>(py: Python<'py>, o: &SinkOutcome) -> PyResult<Bound<'py, Py
 }
 
 #[pymodule]
-fn entl(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _entl(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Entl>()?;
     m.add_class::<SinkTarget>()?;
+    m.add_class::<Changes>()?;
     Ok(())
 }
