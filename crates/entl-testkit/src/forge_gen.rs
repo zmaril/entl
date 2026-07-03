@@ -59,6 +59,24 @@ fn arb_pr() -> impl Strategy<Value = RawPr> {
         })
 }
 
+#[derive(Debug, Clone)]
+struct RawRun {
+    head: usize,
+    jobs: Vec<usize>, // one entry per job = its step count
+    check: bool,
+    status: bool,
+}
+
+fn arb_run() -> impl Strategy<Value = RawRun> {
+    (
+        0usize..8,
+        prop::collection::vec(0usize..4, 0..3),
+        any::<bool>(),
+        any::<bool>(),
+    )
+        .prop_map(|(head, jobs, check, status)| RawRun { head, jobs, check, status })
+}
+
 fn arb_issue() -> impl Strategy<Value = RawIssue> {
     (
         0usize..8,
@@ -79,8 +97,10 @@ pub fn arb_forge_world() -> impl Strategy<Value = ForgeWorld> {
         prop::collection::vec(arb_pr(), 0..5),
         prop::collection::vec(arb_issue(), 0..5),
         0usize..5,
+        0usize..3,
+        prop::collection::vec(arb_run(), 0..3),
     )
-        .prop_map(|(nu, nl, prs, issues, ne)| build(nu, nl, prs, issues, ne))
+        .prop_map(|(nu, nl, prs, issues, ne, nw, runs)| build(nu, nl, prs, issues, ne, nw, runs))
 }
 
 fn dedup(mut v: Vec<usize>, modulo: usize) -> Vec<usize> {
@@ -93,7 +113,16 @@ fn dedup(mut v: Vec<usize>, modulo: usize) -> Vec<usize> {
     v
 }
 
-fn build(nu: usize, nl: usize, prs: Vec<RawPr>, issues: Vec<RawIssue>, ne: usize) -> ForgeWorld {
+#[allow(clippy::too_many_arguments)]
+fn build(
+    nu: usize,
+    nl: usize,
+    prs: Vec<RawPr>,
+    issues: Vec<RawIssue>,
+    ne: usize,
+    nw: usize,
+    raw_runs: Vec<RawRun>,
+) -> ForgeWorld {
     let users: Vec<GhUser> = (0..nu)
         .map(|i| GhUser {
             id: (i + 1) as i64,
@@ -237,5 +266,76 @@ fn build(nu: usize, nl: usize, prs: Vec<RawPr>, issues: Vec<RawIssue>, ne: usize
         })
         .collect();
 
-    ForgeWorld { owner: "acme".into(), name: "widget".into(), users, labels, pulls, issues, events }
+    let workflows: Vec<GhWorkflow> = (0..nw)
+        .map(|i| GhWorkflow {
+            id: next(),
+            name: format!("wf{i}"),
+            path: format!(".github/workflows/{i}.yml"),
+            state: "active".into(),
+        })
+        .collect();
+
+    let (mut runs, mut checks, mut statuses) = (Vec::new(), Vec::new(), Vec::new());
+    for (k, rr) in raw_runs.into_iter().enumerate() {
+        let jobs: Vec<GhJob> = rr
+            .jobs
+            .iter()
+            .map(|&nsteps| GhJob {
+                id: next(),
+                name: "build".into(),
+                status: "completed".into(),
+                conclusion: Some("success".into()),
+                runner_name: Some("ubuntu".into()),
+                steps: (0..nsteps)
+                    .map(|n| GhStep {
+                        number: (n + 1) as i64,
+                        name: format!("step{n}"),
+                        status: "completed".into(),
+                        conclusion: Some("success".into()),
+                    })
+                    .collect(),
+            })
+            .collect();
+        let workflow_id = if workflows.is_empty() { next() } else { workflows[k % workflows.len()].id };
+        runs.push(GhRun {
+            id: next(),
+            workflow_id,
+            head_commit: rr.head,
+            head_branch: "main".into(),
+            event: "push".into(),
+            status: "completed".into(),
+            conclusion: Some("success".into()),
+            run_number: (k + 1) as i64,
+            jobs,
+        });
+        // Checks/statuses live on a run's head commit so the ingest (which only fetches them for
+        // run head shas) actually pulls them.
+        if rr.check {
+            checks.push(GhCheck { id: next(), commit: rr.head, name: "ci".into(), conclusion: Some("success".into()) });
+        }
+        if rr.status {
+            statuses.push(GhStatus {
+                id: next(),
+                commit: rr.head,
+                context: Some("ci".into()),
+                state: "success".into(),
+                description: Some("ok".into()),
+                target_url: Some("https://x.example/s".into()),
+            });
+        }
+    }
+
+    ForgeWorld {
+        owner: "acme".into(),
+        name: "widget".into(),
+        users,
+        labels,
+        pulls,
+        issues,
+        events,
+        workflows,
+        runs,
+        checks,
+        statuses,
+    }
 }

@@ -89,6 +89,15 @@ fn mock_forge_ingests_through_real_pipeline() {
             comments: vec![GhComment { id: 400, body: Some("me too".into()), created_at: Some("2020-01-01T15:00:00Z".into()), author: Some(1) }],
         }],
         events: vec![GhEvent { id: "1000".into(), typ: Some("PushEvent".into()), actor: Some(0), created_at: Some("2020-01-03T00:00:00Z".into()), payload: json!({"size": 1}) }],
+        workflows: vec![GhWorkflow { id: 500, name: "CI".into(), path: ".github/workflows/ci.yml".into(), state: "active".into() }],
+        runs: vec![GhRun {
+            id: 600, workflow_id: 500, head_commit: 0, head_branch: "main".into(), event: "push".into(),
+            status: "completed".into(), conclusion: Some("success".into()), run_number: 1,
+            jobs: vec![GhJob { id: 700, name: "build".into(), status: "completed".into(), conclusion: Some("success".into()), runner_name: Some("ubuntu".into()),
+                steps: vec![GhStep { number: 1, name: "checkout".into(), status: "completed".into(), conclusion: Some("success".into()) }] }],
+        }],
+        checks: vec![GhCheck { id: 800, commit: 0, name: "lint".into(), conclusion: Some("success".into()) }],
+        statuses: vec![GhStatus { id: 900, commit: 0, context: Some("ci/build".into()), state: "success".into(), description: Some("ok".into()), target_url: Some("https://x.example/s".into()) }],
     };
 
     let mock = MockForge::start();
@@ -116,6 +125,30 @@ fn mock_forge_ingests_through_real_pipeline() {
     assert_eq!(count(&db, "gh_issues"), 1, "issues");
     assert_eq!(count(&db, "gh_users"), 2, "users");
     assert_eq!(count(&db, "gh_events"), 1, "events");
+    // Actions/Checks flow through the real ingest too.
+    assert_eq!(count(&db, "gh_workflows"), 1, "workflows");
+    assert_eq!(count(&db, "gh_workflow_runs"), 1, "workflow runs");
+    assert_eq!(count(&db, "gh_jobs"), 1, "jobs");
+    assert_eq!(count(&db, "gh_steps"), 1, "steps");
+    assert_eq!(count(&db, "gh_check_runs"), 1, "check runs");
+    assert_eq!(count(&db, "gh_commit_statuses"), 1, "commit statuses");
+
+    // Schema guard: every gh_ table the ingest can write must be covered by the mock, so adding a
+    // new forge table without extending the mock is caught here. (gh_assignees has no writer.)
+    let gh_tables: Vec<String> = db
+        .conn
+        .prepare("SELECT table_name FROM information_schema.tables WHERE table_schema='main' AND table_name LIKE 'gh_%'")
+        .unwrap()
+        .query_map([], |r| r.get::<_, String>(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    for t in gh_tables {
+        if t == "gh_assignees" {
+            continue; // documented: DDL exists, no writer
+        }
+        assert!(count(&db, &t) > 0, "mock does not cover {t} (ingest writes it but it's empty)");
+    }
 }
 
 fn all_tables() -> Vec<&'static str> {
