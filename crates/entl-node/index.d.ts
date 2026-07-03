@@ -100,6 +100,17 @@ export interface ExtractOptions {
   /** Postgres schema (default "entl"). */
   schema?: string
 }
+/** Options for `Entl.rebuild()`. */
+export interface RebuildOptions {
+  /** Source store: `duckdb` | `sqlite` | `jsonl` | `postgres`. */
+  from: string
+  /** The store location (file / directory / Postgres URL). */
+  dest: string
+  /** Output directory for the reconstructed repo. */
+  out: string
+  /** Postgres schema (default "entl"). */
+  schema?: string
+}
 /** The payload passed to the `watch` callback after each sync cycle. */
 export interface SyncStats {
   newCommits: number
@@ -108,6 +119,44 @@ export interface SyncStats {
   pullRequests: number
   issues: number
   workflowRuns: number
+}
+/** Options for `Entl.driverPlan()`. */
+export interface DriverPlanOptions {
+  /** Only mirror these tables (default: all Postgres-eligible tables). */
+  tables?: Array<string>
+  /** Skip these tables. */
+  exclude?: Array<string>
+  /** Rename tables at the target. */
+  rename?: Array<TableRename>
+  /** Target schema (default "entl"). */
+  schema?: string
+}
+/** Options for `Entl.changes()`. */
+export interface ChangesOptions {
+  /** Also stream GitHub changes (needs a token). Default false. */
+  github?: boolean
+  /** Also stream the object graph (trees/blobs). Default false. */
+  objects?: boolean
+}
+/**
+ * A live change stream from one pull — the design's "stream plane". `next()` resolves to the
+ * next change batch (`{table, op, rows}` JSON) or `null` when the pull is done. Dress it as an
+ * async iterator in JS: `for await (const b of iterate(entl.changes(repo))) { … }`.
+ */
+export declare class Changes {
+  /** The next change batch as JSON (`{table, op, rows}`), or `null` when the stream ends. */
+  next(): Promise<string | null>
+}
+/**
+ * A driver-sink statement plan — the "mirror into a database entl-core doesn't link" surface
+ * (notes/design/multidb.md). All the DDL / type-mapping / upsert logic lives in Rust core
+ * (`DriverSink`); this streams the resulting `{sql, params}` statements so the JS side only
+ * executes them against its own client (e.g. PGlite: `await pg.query(sql, params)`). `next()`
+ * resolves to the next statement or `null` when the plan is complete.
+ */
+export declare class DriverPlan {
+  /** The next statement as JSON (`{sql, params}`), or `null` when the plan is complete. */
+  next(): Promise<string | null>
 }
 /** Handle to a running `watch` loop. Call `stop()` to end it. */
 export declare class WatchHandle {
@@ -139,6 +188,25 @@ export declare class Entl {
    * thread.
    */
   extract(options: ExtractOptions): Promise<string>
+  /**
+   * Stream the change batches from one pull of `repoPath` (the "stream plane"). Returns a
+   * `Changes` handle; call `.next()` for each `{table, op, rows}` batch until it yields `null`.
+   * A background thread runs the pull and feeds the stream (backpressured).
+   */
+  changes(repoPath: string, options?: ChangesOptions | undefined | null): Changes
+  /**
+   * Backfill this handle's DuckDB store into a **driver** target — a database entl-core doesn't
+   * link (PGlite, or any client you hold). Returns a `DriverPlan`; call `.next()` for each
+   * `{sql, params}` statement and run it against your client until it yields `null`. The DDL,
+   * type mapping and upserts are all generated in Rust (`DriverSink`) — the JS side only
+   * executes. A background thread reads the store and feeds the plan (backpressured).
+   */
+  driverPlan(options?: DriverPlanOptions | undefined | null): DriverPlan
+  /**
+   * Reconstruct a git repo from a store into `options.out` → `Promise<number>` (commits
+   * rebuilt). Needs the store to have been sunk with `objects: true`. Off the JS thread.
+   */
+  rebuild(options: RebuildOptions): Promise<number>
   /**
    * Watch `repoPath`: on a background thread, every `intervalSecs`, `git fetch`
    * + load git + load GitHub into the DB, then call `onSync(stats)` so the JS

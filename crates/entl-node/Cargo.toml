@@ -13,6 +13,7 @@ napi = { version = "2", default-features = false, features = ["napi8"] }
 napi-derive = "2"
 entl-core = { path = "../entl-core" }
 serde_json = "1.0.150"
+anyhow = "1"
 
 [build-dependencies]
 napi-build = "2"
