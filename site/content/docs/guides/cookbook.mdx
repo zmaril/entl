@@ -1,0 +1,138 @@
+---
+title: Cookbook
+description: Copy-paste recipes for loading, reading, and rebuilding — in the CLI, Node, and Python.
+---
+
+Short, complete recipes for the core operations. Every code block on this page is **executed as
+part of Entl's test suite** (`bun test examples.test.ts` in `site/`), against a throwaway repo — so
+they don't drift from the real API. Replace `./repo` with your own repository path.
+
+## Load a repo into SQLite
+
+Pull a repo's git history straight into a SQLite file. (`--no-github` / `github: false` skips the
+forge, so no token is needed.)
+
+<Tabs groupId="lang" persist items={['CLI', 'Node', 'Python']}>
+  <Tab value="CLI">
+    ```sh
+    entl sink ./repo --to sqlite --dest data.sqlite --db :memory: --no-github
+    ```
+  </Tab>
+  <Tab value="Node">
+    ```js
+    import { Entl, SinkTarget } from "@entl/node";
+
+    const entl = new Entl(":memory:");
+    const stats = await entl.sink("./repo", { target: SinkTarget.Sqlite, path: "data.sqlite", github: false });
+    console.log(`${stats.newCommits} commits, ${stats.fileChanges} file changes`);
+    ```
+  </Tab>
+  <Tab value="Python">
+    ```python
+    import entl
+
+    e = entl.Entl(":memory:")
+    stats = e.sink("./repo", entl.SinkTarget.Sqlite, path="data.sqlite", github=False)
+    print(stats["new_commits"], "commits")
+    ```
+  </Tab>
+</Tabs>
+
+## Read a store back out
+
+`extract` reads any store back into canonical rows (object-ids as hex, timestamps as RFC3339) —
+the exact inverse of `sink`. Here we sink, then read `commits` back.
+
+<Tabs groupId="lang" persist items={['CLI', 'Node', 'Python']}>
+  <Tab value="CLI">
+    ```sh
+    entl sink ./repo --to sqlite --dest data.sqlite --db :memory: --no-github
+    entl extract --from sqlite --dest data.sqlite --tables commits
+    ```
+  </Tab>
+  <Tab value="Node">
+    ```js
+    import { Entl, SinkTarget } from "@entl/node";
+
+    const entl = new Entl(":memory:");
+    await entl.sink("./repo", { target: SinkTarget.Sqlite, path: "data.sqlite", github: false });
+    const snapshot = JSON.parse(await entl.extract({ source: "sqlite", path: "data.sqlite", tables: ["commits"] }));
+    console.log(snapshot.commits.length, "commits");
+    ```
+  </Tab>
+  <Tab value="Python">
+    ```python
+    import json, entl
+
+    e = entl.Entl(":memory:")
+    e.sink("./repo", entl.SinkTarget.Sqlite, path="data.sqlite", github=False)
+    snapshot = json.loads(e.extract("sqlite", "data.sqlite", tables=["commits"]))
+    print(len(snapshot["commits"]), "commits")
+    ```
+  </Tab>
+</Tabs>
+
+## Rebuild a repo from a store
+
+With `--objects` (`objects: true`), Entl stores the full trees + blob contents, so a store can be
+**rehydrated into a byte-identical git repo** — even one you don't have cloned.
+
+<Tabs groupId="lang" persist items={['CLI', 'Node', 'Python']}>
+  <Tab value="CLI">
+    ```sh
+    entl sink ./repo --to sqlite --dest data.sqlite --db :memory: --no-github --objects
+    entl rebuild --from sqlite --dest data.sqlite --out rebuilt
+    git -C rebuilt log --oneline
+    ```
+  </Tab>
+  <Tab value="Node">
+    ```js
+    import { Entl, SinkTarget } from "@entl/node";
+
+    const entl = new Entl(":memory:");
+    await entl.sink("./repo", { target: SinkTarget.Sqlite, path: "data.sqlite", github: false, objects: true });
+    const commits = await entl.rebuild({ from: "sqlite", dest: "data.sqlite", out: "rebuilt" });
+    console.log("rebuilt", commits, "commits");
+    ```
+  </Tab>
+  <Tab value="Python">
+    ```python
+    import entl
+
+    e = entl.Entl(":memory:")
+    e.sink("./repo", entl.SinkTarget.Sqlite, path="data.sqlite", github=False, objects=True)
+    commits = e.rebuild("sqlite", "data.sqlite", "rebuilt")
+    print("rebuilt", commits, "commits")
+    ```
+  </Tab>
+</Tabs>
+
+## Stream changes as they land
+
+The **stream plane**: iterate the change batches from a pull (`{table, op, rows}`), the same events
+the sinks consume. Point it at a live store (like PGlite) and its realtime queries update for free.
+
+<Tabs groupId="lang" persist items={['Node', 'Python']}>
+  <Tab value="Node">
+    ```js
+    import { Entl } from "@entl/node";
+
+    const entl = new Entl(":memory:");
+    const changes = entl.changes("./repo");
+    for (let s; (s = await changes.next()) !== null; ) {
+      const batch = JSON.parse(s);
+      console.log(batch.op, batch.table, `${batch.rows.length} rows`);
+    }
+    ```
+  </Tab>
+  <Tab value="Python">
+    ```python
+    import json, entl
+
+    e = entl.Entl(":memory:")
+    for s in e.changes("./repo"):
+        batch = json.loads(s)
+        print(batch["op"], batch["table"], len(batch["rows"]), "rows")
+    ```
+  </Tab>
+</Tabs>

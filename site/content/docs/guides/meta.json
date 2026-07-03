@@ -1,4 +1,4 @@
 {
   "title": "How-to guides",
-  "pages": ["querying", "sync-postgres"]
+  "pages": ["cookbook", "querying", "sync-postgres"]
 }
