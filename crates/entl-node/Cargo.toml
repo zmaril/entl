@@ -9,7 +9,7 @@ description = "Node-API (napi-rs) binding: the entl engine, in-process in Node/B
 crate-type = ["cdylib"]
 
 [dependencies]
-napi = { version = "2", default-features = false, features = ["napi8"] }
+napi = { version = "3", default-features = false, features = ["napi8"] }
 napi-derive = "3"
 entl-core = { path = "../entl-core" }
 serde_json = "1.0.150"
