@@ -209,8 +209,10 @@ Legend: [ ] todo  [~] in progress  [x] done
     (drift-guarded) + core_impl.rs (third structural copy) + a 21-line lib.rs. Ruby also GAINED
     loadGit/loadGithub/changes/driverPlan/rebuild + the Git helpers (was new/sink/query/extract
     only). Parity: minitest 3 assertions green.
-[ ] core_impl dedup across bindings (same logic, THREE per-crate copies now) — a shared macro
-    or entl-core-side adapter.
+[x] core_impl dedup: entl_core::binding_core_impls! — the trait impls written ONCE as a macro
+    (bare types resolve at each binding's expansion site; one param for python's from_). Each
+    binding's core_impl.rs = a doc comment + one macro call. (Flagged by straitjacket's
+    duplication rule; was already the top follow-up here.)
 [ ] Arrow C-FFI handoff for bulk data (replace rows-as-JSON in ChangeBatch/Statement) — with Step 2.
 
 ## Step 6 — fan out (independent codecs vs the frozen IR)

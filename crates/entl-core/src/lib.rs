@@ -2,6 +2,7 @@
 //! Write path uses the raw `duckdb` crate (Appender for bulk ingest); the
 //! schema is hand-written SQL migrations (no ORM in the core).
 
+pub mod binding;
 pub mod conflicts;
 pub mod db;
 pub mod diff;
