@@ -1,0 +1,154 @@
+# entl CI: the Rust engine + fluessig, all three bindings against their suites,
+# the codegen-freshness gate (every generated artifact must match a fresh
+# regeneration — stale codegen is a build failure, not a surprise), the Postgres
+# leg of the testkit round-trips, and the executable-docs harness (every code
+# block in the cookbook runs against a fixture repo).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: rust (core + cli + fluessig + testkit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust-setup
+      # default members: entl-core, entl-cli, fluessig (incl. the drift guards
+      # over every committed generated artifact)
+      - run: cargo test
+      # the round-trip property tests (P1 store, P2 OID-exact, P3 forge)
+      - run: cargo test -p entl-testkit
+
+  node:
+    name: node binding + codegen freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust-setup
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: build the napi addon
+        working-directory: crates/entl-node
+        run: |
+          bun install
+          bun run build
+      - name: bun test (PGlite e2e + coverage)
+        working-directory: crates/entl-node
+        run: bun test
+      - name: codegen freshness — regenerate everything, fail on drift
+        run: |
+          (cd crates/fluessig/emitter && npm install && node emit.mjs ../entl.tsp)
+          (cd crates/entl-node && bun run gen)
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::generated artifacts are stale — run the regen chain and commit (see crates/fluessig/plan.txt)"
+            git status --porcelain
+            git diff | head -200
+            exit 1
+          fi
+
+  python:
+    name: python binding
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust-setup
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: build + test
+        working-directory: crates/entl-python
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --quiet maturin pytest sqlalchemy
+          .venv/bin/maturin develop --quiet
+          .venv/bin/python -m pytest tests/ -q
+
+  ruby:
+    name: ruby binding
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust-setup
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      # rb_sys drives cargo through extconf/make; bindgen finds the runner's
+      # libclang on its own (no LIBCLANG_PATH needed on ubuntu images).
+      - name: build + test
+        working-directory: crates/entl-ruby
+        run: |
+          gem install rb_sys minitest
+          ruby extconf.rb
+          make
+          ruby -I. -Itest test/test_entl.rb
+
+  postgres:
+    name: postgres sink (testkit round-trips)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: pg
+          POSTGRES_DB: entl
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust-setup
+      # the same P1/P2/P3 properties as the rust job, but with the Postgres
+      # sink included (ENTL_TEST_PG gates it; embedded stores always run)
+      - run: cargo test -p entl-testkit
+        env:
+          ENTL_TEST_PG: postgres://postgres:pg@localhost:5432/entl
+
+  docs:
+    name: executable docs (cookbook blocks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust-setup
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # the harness skips when a prerequisite is missing, so build all three —
+      # the CLI, the napi addon, and the python venv — before running it.
+      - name: build the CLI (release)
+        run: cargo build --release
+      - name: build the napi addon
+        working-directory: crates/entl-node
+        run: |
+          bun install
+          bun run build
+      - name: build the python addon
+        working-directory: crates/entl-python
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --quiet maturin sqlalchemy
+          .venv/bin/maturin develop --quiet
+      # examples.test.ts is dependency-free (bun:test + node builtins), so no
+      # `bun install` in site/ — it would pull the whole docs toolchain for nothing.
+      # The existence checks keep the harness's skip-when-unbuilt behavior from
+      # turning a broken build step into a silently-green job.
+      - name: run every cookbook code block
+        working-directory: site
+        run: |
+          test -x ../target/release/entl
+          test -f ../crates/entl-node/index.js
+          test -x ../crates/entl-python/.venv/bin/python
+          bun test examples.test.ts

@@ -1,0 +1,12 @@
+# housekeeper overrides — see github.com/zmaril/housekeeping
+
+[checks]
+# Commit style here is prose summaries, not conventional commits; PRs land as
+# merge commits so a PR-title lint wouldn't reach main's history anyway.
+# Revisit if the repo moves to squash merges.
+conventional-commits = "off"
+
+[stray-files]
+# Deliberate working docs, not strays: todo.txt is the active worklist,
+# translation.md is the bindings-abstraction analysis that fluessig grew from.
+allow = ["todo.txt", "translation.md"]

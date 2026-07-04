@@ -1,0 +1,7 @@
+name: rust setup
+description: The Rust toolchain + build cache every CI job starts with (checkout first — a local action can't run before the repo exists).
+runs:
+  using: composite
+  steps:
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
