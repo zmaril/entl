@@ -175,7 +175,17 @@
             "k": "scalar",
             "name": "string"
           },
-          "nullable": true
+          "nullable": true,
+          "doc": "from the forge (`repos/{o}/{r}`), when a GitHub sync has run"
+        },
+        {
+          "name": "homepageUrl",
+          "type": {
+            "k": "scalar",
+            "name": "string"
+          },
+          "nullable": true,
+          "doc": "the repo's homepage URL from the forge, when set"
         },
         {
           "name": "firstSyncedAt",
@@ -192,6 +202,69 @@
             "name": "utcDateTime"
           },
           "nullable": true
+        }
+      ]
+    },
+    {
+      "name": "GitNote",
+      "table": "git_notes",
+      "key": [
+        "repo",
+        "notesRef",
+        "annotatedOid"
+      ],
+      "doc": "A git note (`refs/notes/*`): free-form text attached to any object after the\nfact, without rewriting it. Mutable per-repo state like refs — each sync\nreplaces the repo's rows. The default ref is `refs/notes/commits`; other\nnamespaces ride the notesRef column.",
+      "fields": [
+        {
+          "name": "repo",
+          "type": {
+            "k": "ref",
+            "name": "Repo",
+            "entity": true
+          },
+          "nullable": false,
+          "key": true,
+          "relation": {
+            "to": "Repo",
+            "cardinality": "one",
+            "kind": "association",
+            "properties": null,
+            "fkColumns": [
+              "repo_id"
+            ],
+            "typeColumn": null,
+            "sourceColumns": null,
+            "sourceTypeColumn": null
+          }
+        },
+        {
+          "name": "notesRef",
+          "type": {
+            "k": "scalar",
+            "name": "string"
+          },
+          "nullable": false,
+          "doc": "full notes ref name, e.g. `refs/notes/commits`",
+          "key": true
+        },
+        {
+          "name": "annotatedOid",
+          "type": {
+            "k": "scalar",
+            "name": "Oid",
+            "base": "bytes"
+          },
+          "nullable": false,
+          "doc": "the object the note annotates (usually a commit)",
+          "key": true
+        },
+        {
+          "name": "note",
+          "type": {
+            "k": "scalar",
+            "name": "string"
+          },
+          "nullable": false
         }
       ]
     },

@@ -27,6 +27,7 @@ export const EntlTables = {
     ghUsers: "gh_users",
     ghWorkflowRuns: "gh_workflow_runs",
     ghWorkflows: "gh_workflows",
+    gitNotes: "git_notes",
     refs: "refs",
     repos: "repos",
     treeEntries: "tree_entries",

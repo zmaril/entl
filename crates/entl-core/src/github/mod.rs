@@ -488,6 +488,30 @@ fn emit_subject(
     Ok(())
 }
 
+/// Enrich the `repos` row with forge identity: default branch + homepage from
+/// `GET /repos/{owner}/{name}`. Best-effort — a failure (rate limit, missing
+/// scope, mock server without the endpoint) leaves the columns as they were.
+async fn sync_repo_meta(
+    db: &Db,
+    client: &octocrab::Octocrab,
+    owner: &str,
+    name: &str,
+    repo_id: &str,
+) {
+    let meta: serde_json::Value =
+        match client.get(format!("/repos/{owner}/{name}"), None::<&()>).await {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+    let default_branch = meta.get("default_branch").and_then(|v| v.as_str());
+    let homepage = meta.get("homepage").and_then(|v| v.as_str()).filter(|s| !s.is_empty());
+    let _ = db.conn.execute(
+        "UPDATE repos SET host = 'github.com', owner = ?, name = ?, \
+         default_branch = ?, homepage_url = ? WHERE id = ?",
+        params![owner, name, default_branch, homepage, repo_id],
+    );
+}
+
 async fn ingest_async(
     db: &Db,
     owner: &str,
@@ -514,6 +538,11 @@ async fn ingest_async(
     if !active {
         return Ok(stats);
     }
+
+    // Repo metadata (default branch, homepage) — one cheap GET, best-effort:
+    // enriches the git-side `repos` row with forge identity. Only on active
+    // syncs, so idle polls stay one conditional request.
+    sync_repo_meta(db, &client, owner, name, repo_id).await;
 
     // Each resource is gated by a cheap conditional REST probe (free on 304), then
     // synced incrementally (PRs/issues replace only what changed since their

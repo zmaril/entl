@@ -270,6 +270,14 @@ export const ghWorkflows = entl.table("gh_workflows", {
 },
     (t) => [primaryKey({ columns: [t.id] })]);
 
+export const gitNotes = entl.table("git_notes", {
+    repoId: text("repo_id").notNull(),
+    notesRef: text("notes_ref").notNull(),
+    annotatedOid: text("annotated_oid").notNull(),
+    note: text("note").notNull(),
+},
+    (t) => [primaryKey({ columns: [t.repoId, t.notesRef, t.annotatedOid] })]);
+
 export const refs = entl.table("refs", {
     repoId: text("repo_id").notNull(),
     name: text("name").notNull(),
@@ -288,6 +296,7 @@ export const repos = entl.table("repos", {
     owner: text("owner"),
     name: text("name"),
     defaultBranch: text("default_branch"),
+    homepageUrl: text("homepage_url"),
     firstSyncedAt: timestamp("first_synced_at", { withTimezone: true }),
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
 },

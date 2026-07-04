@@ -106,7 +106,7 @@ fn collect_refs(repo: &gix::Repository) -> Result<Vec<RefRecord>> {
             Some(gix::reference::Category::LocalBranch) => "branch",
             Some(gix::reference::Category::RemoteBranch) => "remote",
             Some(gix::reference::Category::Tag) => "tag",
-            _ => continue, // skip notes, stash, etc.
+            _ => continue, // skip stash etc. (notes are collected separately)
         };
         let short = r.name().shorten().to_string();
         let Ok(id) = r.peel_to_id() else { continue };
@@ -118,6 +118,67 @@ fn collect_refs(repo: &gix::Repository) -> Result<Vec<RefRecord>> {
         });
     }
     Ok(out)
+}
+
+/// One git note: which notes ref it lives under, the object it annotates, and
+/// the note text.
+struct NoteRecord {
+    notes_ref: String,
+    annotated_oid: gix::ObjectId,
+    note: String,
+}
+
+/// Walk every `refs/notes/*` ref: its tip commit's tree maps the annotated
+/// object's hex oid — possibly fanned out across subdirectories — to a note
+/// blob; joining the path segments back together recovers the oid.
+fn collect_notes(repo: &gix::Repository) -> Result<Vec<NoteRecord>> {
+    let mut out = Vec::new();
+    let platform = repo.references().context("open refs")?;
+    let Ok(iter) = platform.prefixed("refs/notes/") else {
+        return Ok(out);
+    };
+    for r in iter {
+        let Ok(mut r) = r else { continue };
+        let name = r.name().as_bstr().to_string();
+        let Ok(id) = r.peel_to_id() else { continue };
+        let Ok(obj) = repo.find_object(id.detach()) else { continue };
+        let Ok(commit) = obj.try_into_commit() else { continue };
+        let Ok(tree) = commit.tree() else { continue };
+        walk_notes(repo, &tree, String::new(), &name, &mut out)?;
+    }
+    Ok(out)
+}
+
+fn walk_notes(
+    repo: &gix::Repository,
+    tree: &gix::Tree<'_>,
+    prefix: String,
+    notes_ref: &str,
+    out: &mut Vec<NoteRecord>,
+) -> Result<()> {
+    for e in tree.iter() {
+        let e = e?;
+        let seg = e.filename().to_str_lossy().into_owned();
+        match e.mode().kind() {
+            gix::object::tree::EntryKind::Tree => {
+                let sub = repo.find_object(e.oid().to_owned())?.into_tree();
+                walk_notes(repo, &sub, format!("{prefix}{seg}"), notes_ref, out)?;
+            }
+            gix::object::tree::EntryKind::Blob
+            | gix::object::tree::EntryKind::BlobExecutable => {
+                let hex = format!("{prefix}{seg}");
+                let Ok(oid) = gix::ObjectId::from_hex(hex.as_bytes()) else { continue };
+                let Ok(blob) = repo.find_object(e.oid().to_owned()) else { continue };
+                out.push(NoteRecord {
+                    notes_ref: notes_ref.to_string(),
+                    annotated_oid: oid,
+                    note: String::from_utf8_lossy(&blob.data).into_owned(),
+                });
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 /// Stable repo id (hash of the canonical worktree path) shared by all passes,
@@ -222,6 +283,27 @@ pub fn ingest_git_streamed(
     if let Some(sink) = sink {
         let rows: Vec<&RefRecord> = by_name.values().copied().collect();
         sink.emit(ChangeBatch::new("refs", ChangeOp::Replace, refs_batch(&rows, &repo_id)?));
+    }
+
+    // Git notes (refs/notes/*): mutable per-repo state like refs — bulk-replace.
+    let notes = collect_notes(&repo)?;
+    db.conn
+        .execute("DELETE FROM git_notes WHERE repo_id = ?", params![repo_id])?;
+    if !notes.is_empty() {
+        let mut app = db.conn.appender("git_notes")?;
+        for n in &notes {
+            app.append_row(params![repo_id, n.notes_ref, n.annotated_oid.as_bytes(), n.note])?;
+        }
+        app.flush()?;
+    }
+    if let Some(sink) = sink {
+        if !notes.is_empty() {
+            sink.emit(ChangeBatch::new(
+                "git_notes",
+                ChangeOp::Replace,
+                notes_batch(&notes, &repo_id)?,
+            ));
+        }
     }
 
     // Walk once (cheap) to collect new commit oids; the heavy per-commit work
@@ -597,6 +679,29 @@ fn refs_batch(rows: &[&RefRecord], repo_id: &str) -> Result<RecordBatch> {
     Ok(RecordBatch::try_new(schema, cols)?)
 }
 
+fn notes_batch(rows: &[NoteRecord], repo_id: &str) -> Result<RecordBatch> {
+    let (mut rid, mut nref, mut note) =
+        (StringBuilder::new(), StringBuilder::new(), StringBuilder::new());
+    let mut oid = BinaryBuilder::new();
+    for n in rows {
+        rid.append_value(repo_id);
+        nref.append_value(&n.notes_ref);
+        oid.append_value(n.annotated_oid.as_bytes());
+        note.append_value(&n.note);
+    }
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("repo_id", DataType::Utf8, false),
+        Field::new("notes_ref", DataType::Utf8, false),
+        Field::new("annotated_oid", DataType::Binary, false),
+        Field::new("note", DataType::Utf8, false),
+    ]));
+    let cols: Vec<ArrayRef> = vec![
+        Arc::new(rid.finish()), Arc::new(nref.finish()), Arc::new(oid.finish()),
+        Arc::new(note.finish()),
+    ];
+    Ok(RecordBatch::try_new(schema, cols)?)
+}
+
 /// Build + emit the accumulated commit/parent/file-change batches, then clear.
 /// Returns `false` if the consumer hung up (caller should stop).
 fn flush_git_stream(
@@ -683,6 +788,49 @@ mod tests {
         assert_eq!(rows.get("commits").copied().unwrap_or(0), 2, "two commit rows streamed");
         assert!(rows.get("file_changes").copied().unwrap_or(0) >= 2, "file_changes streamed");
         assert!(rows.contains_key("refs"), "refs streamed");
+    }
+
+    /// Git notes (refs/notes/*) land in `git_notes` — annotated oid recovered
+    /// from the notes tree, note text intact — and re-sync replaces cleanly.
+    #[test]
+    fn ingest_captures_git_notes() {
+        let dir = std::env::temp_dir().join(format!("entl-notes-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        git(&dir, &["init", "-q"]);
+        std::fs::write(dir.join("a.txt"), "hello\n").unwrap();
+        git(&dir, &["add", "."]);
+        git(&dir, &["commit", "-qm", "first"]);
+        git(&dir, &["notes", "add", "-m", "reviewed: looks good"]);
+        git(&dir, &["notes", "--ref", "refs/notes/pm", "add", "-m", "pm-state: shipped"]);
+
+        let db = Db::open(":memory:").unwrap();
+        db.migrate().unwrap();
+        let path = dir.to_string_lossy().to_string();
+        let counter = AtomicU64::new(0);
+        ingest_git(&db, &path, &counter).unwrap();
+
+        let (n, note): (i64, String) = db
+            .conn
+            .query_row(
+                "SELECT count(*) OVER (), note FROM git_notes \
+                 WHERE notes_ref = 'refs/notes/commits' \
+                 AND annotated_oid = (SELECT oid FROM commits LIMIT 1)",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(note, "reviewed: looks good\n");
+        let total: i64 =
+            db.conn.query_row("SELECT count(*) FROM git_notes", [], |r| r.get(0)).unwrap();
+        assert_eq!(total, 2, "both notes refs captured (got {n} in the commits ref)");
+
+        // Re-sync replaces, not duplicates.
+        ingest_git(&db, &path, &counter).unwrap();
+        let total: i64 =
+            db.conn.query_row("SELECT count(*) FROM git_notes", [], |r| r.get(0)).unwrap();
+        assert_eq!(total, 2, "bulk-replace on re-sync");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 

@@ -58,7 +58,7 @@ CREATE OR REPLACE MACRO ancestors(start_oid) AS TABLE
 -- Joins and the graph macros operate on the raw BLOB columns (faster than text);
 -- hex is computed lazily, only on the rows a human selects.
 
-CREATE MACRO oid(h) AS unhex(h);
+CREATE OR REPLACE MACRO oid(h) AS unhex(h);
 
 CREATE OR REPLACE VIEW commits_hex AS
 SELECT lower(hex(oid)) AS oid, repo_id, lower(hex(tree_oid)) AS tree_oid,

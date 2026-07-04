@@ -11,9 +11,9 @@ const CATALOG: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/catalog
 fn entl_catalog_loads_and_validates() {
     let c = load_catalog(CATALOG).expect("entl catalog must validate");
 
-    // 28-table accounting: 22 concrete entity tables + 6 relation tables.
+    // 29-table accounting: 23 concrete entity tables + 6 relation tables.
     let concrete: Vec<_> = c.entities.iter().filter(|e| !e.is_abstract).collect();
-    assert_eq!(concrete.len(), 22);
+    assert_eq!(concrete.len(), 23);
     let mut tables: std::collections::BTreeSet<String> =
         concrete.iter().map(|e| c.table_name(e)).collect();
     for e in &c.entities {
@@ -23,7 +23,7 @@ fn entl_catalog_loads_and_validates() {
             }
         }
     }
-    assert_eq!(tables.len(), 28, "tables: {tables:?}");
+    assert_eq!(tables.len(), 29, "tables: {tables:?}");
 }
 
 #[test]
