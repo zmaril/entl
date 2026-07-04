@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 napi = { version = "2", default-features = false, features = ["napi8"] }
-napi-derive = "2"
+napi-derive = "3"
 entl-core = { path = "../entl-core" }
 serde_json = "1.0.150"
 anyhow = "1"
