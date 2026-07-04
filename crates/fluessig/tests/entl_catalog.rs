@@ -127,8 +127,12 @@ fn the_committed_schema_gen_module_regenerates_identically() {
     let c = load_catalog(CATALOG).unwrap();
     let stale = |name: &str| format!("{name} is stale — regenerate (see test comment)");
 
+    // entl generates with this banner note (the `--banner-note` in entl-node's
+    // package.json `gen` script) — keep the two in sync.
+    let note = Some("straitjacket-allow-file:duplication — generated code repeats by design.");
+
     let committed = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../entl-core/src/schema_gen.rs"));
-    assert_eq!(fluessig::sql::rust_schema_module(&c), committed, "{}", stale("schema_gen.rs"));
+    assert_eq!(fluessig::sql::rust_schema_module(&c, note), committed, "{}", stale("schema_gen.rs"));
 
     let committed = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/schema_docs.json"));
     assert_eq!(
@@ -140,13 +144,13 @@ fn the_committed_schema_gen_module_regenerates_identically() {
 
     let committed =
         include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../entl-python/python/entl/models.py"));
-    assert_eq!(fluessig::codegen::python_models(&c), committed, "{}", stale("models.py"));
+    assert_eq!(fluessig::codegen::python_models(&c, note), committed, "{}", stale("models.py"));
 
     let committed = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../entl-node/tables.gen.ts"));
-    assert_eq!(fluessig::codegen::ts_tables(&c), committed, "{}", stale("tables.gen.ts"));
+    assert_eq!(fluessig::codegen::ts_tables(&c, note), committed, "{}", stale("tables.gen.ts"));
 
     let committed = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../entl-node/schema.gen.ts"));
-    assert_eq!(fluessig::codegen::ts_drizzle(&c), committed, "{}", stale("schema.gen.ts"));
+    assert_eq!(fluessig::codegen::ts_drizzle(&c, note), committed, "{}", stale("schema.gen.ts"));
 
     // the generated node binding (the op layer)
     let api = fluessig::api::load_api(include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/api.json")))
@@ -159,7 +163,7 @@ fn the_committed_schema_gen_module_regenerates_identically() {
     let committed =
         include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../entl-node/src/generated.rs"));
     assert_eq!(
-        fluessig::bindgen::node_binding(&api, &enums),
+        fluessig::bindgen::node_binding(&api, &enums, note),
         committed,
         "{}",
         stale("entl-node generated.rs")
@@ -168,7 +172,7 @@ fn the_committed_schema_gen_module_regenerates_identically() {
     let committed =
         include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../entl-python/src/generated.rs"));
     assert_eq!(
-        fluessig::bindgen::python_binding(&api, &enums),
+        fluessig::bindgen::python_binding(&api, &enums, note),
         committed,
         "{}",
         stale("entl-python generated.rs")
@@ -177,7 +181,7 @@ fn the_committed_schema_gen_module_regenerates_identically() {
     let committed =
         include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../entl-ruby/src/generated.rs"));
     assert_eq!(
-        fluessig::bindgen::ruby_binding(&api, &enums),
+        fluessig::bindgen::ruby_binding(&api, &enums, note),
         committed,
         "{}",
         stale("entl-ruby generated.rs")

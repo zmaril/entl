@@ -1,6 +1,11 @@
 //! `fluessig-gen <catalog.json> <out.rs> [--docs <p>] [--py-models <p>] [--ts-tables <p>] [--ts-drizzle <p>]`
 //! — generate the committed artifacts: the Rust schema module, the docs
 //! projection, and the ORM read planes (see [`fluessig::sql`] / [`fluessig::codegen`]).
+//!
+//! `--banner-note <text>` appends one extra comment line to every generated
+//! file's banner — for consumers who want a marker in their generated code
+//! (e.g. a lint-suppression line). Off by default: fluessig doesn't bake any
+//! tool-specific markers into its output.
 
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -18,9 +23,11 @@ fn main() {
     let py_models = flag("--py-models");
     let ts_tables = flag("--ts-tables");
     let ts_drizzle = flag("--ts-drizzle");
+    let banner_note = flag("--banner-note");
+    let note = banner_note.as_deref();
     let [catalog_path, out_path] = args.as_slice() else {
         eprintln!(
-            "usage: fluessig-gen <catalog.json> <out.rs> [--docs <p>] [--py-models <p>] [--ts-tables <p>] [--ts-drizzle <p>]"
+            "usage: fluessig-gen <catalog.json> <out.rs> [--docs <p>] [--py-models <p>] [--ts-tables <p>] [--ts-drizzle <p>] [--banner-note <text>]"
         );
         std::process::exit(2);
     };
@@ -37,19 +44,19 @@ fn main() {
         println!("wrote {path} ({} bytes)", content.len());
     };
 
-    write(out_path, fluessig::sql::rust_schema_module(&catalog));
+    write(out_path, fluessig::sql::rust_schema_module(&catalog, note));
     if let Some(p) = docs {
         let json = fluessig::sql::schema_docs_json(&catalog, fluessig::sql::Dialect::Duckdb);
         write(&p, format!("{json}\n"));
     }
     if let Some(p) = py_models {
-        write(&p, fluessig::codegen::python_models(&catalog));
+        write(&p, fluessig::codegen::python_models(&catalog, note));
     }
     if let Some(p) = ts_tables {
-        write(&p, fluessig::codegen::ts_tables(&catalog));
+        write(&p, fluessig::codegen::ts_tables(&catalog, note));
     }
     if let Some(p) = ts_drizzle {
-        write(&p, fluessig::codegen::ts_drizzle(&catalog));
+        write(&p, fluessig::codegen::ts_drizzle(&catalog, note));
     }
     if let Some(p) = node {
         let Some(ap) = api_path.as_deref() else {
@@ -66,12 +73,12 @@ fn main() {
             .iter()
             .map(|e| (e.name.clone(), e.variants.iter().map(|v| v.name.clone()).collect()))
             .collect();
-        write(&p, fluessig::bindgen::node_binding(&api, &enums));
+        write(&p, fluessig::bindgen::node_binding(&api, &enums, note));
         if let Some(py) = python {
-            write(&py, fluessig::bindgen::python_binding(&api, &enums));
+            write(&py, fluessig::bindgen::python_binding(&api, &enums, note));
         }
         if let Some(rb) = ruby {
-            write(&rb, fluessig::bindgen::ruby_binding(&api, &enums));
+            write(&rb, fluessig::bindgen::ruby_binding(&api, &enums, note));
         }
     }
 }

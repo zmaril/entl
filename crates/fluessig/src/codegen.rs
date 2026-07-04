@@ -40,14 +40,23 @@ fn pascal(s: &str) -> String {
     it.next().map(|f| f.to_ascii_uppercase().to_string() + it.as_str()).unwrap_or_default()
 }
 
-const BANNER: &str = "AUTO-GENERATED from the fluessig catalog (crates/fluessig/entl.tsp). Do not edit by hand.\nRegenerate: the fluessig-gen command in crates/fluessig/plan.txt (or `bun run gen` in crates/entl-node).\nstraitjacket-allow-file:duplication — generated code repeats by design.";
+const BANNER: &str = "AUTO-GENERATED from the fluessig catalog (crates/fluessig/entl.tsp). Do not edit by hand.\nRegenerate: the fluessig-gen command in crates/fluessig/plan.txt (or `bun run gen` in crates/entl-node).";
+
+/// The banner plus the caller's optional extra note line (e.g. a lint-suppression
+/// marker) — fluessig itself never bakes tool-specific markers into its output.
+fn banner_with(note: Option<&str>) -> String {
+    match note {
+        Some(n) => format!("{BANNER}\n{n}"),
+        None => BANNER.to_string(),
+    }
+}
 
 /// `entl.models` — the SQLAlchemy read-plane. Typed generically so the same
 /// models work against any store the data was sunk into (SQLite/Postgres):
 /// object-ids come back as hex strings, timestamps as RFC3339 strings. The
 /// models are READ-ONLY: `create_all`/`drop_all` are guarded — the sink owns
 /// the schema.
-pub fn python_models(c: &Catalog) -> String {
+pub fn python_models(c: &Catalog, banner_note: Option<&str>) -> String {
     let defs = tables(c, Dialect::Postgres);
     let column = &python::import("sqlalchemy", "Column");
     let event = &python::import("sqlalchemy", "event");
@@ -114,12 +123,12 @@ pub fn python_models(c: &Catalog) -> String {
         $(for cls in classes join ($['\n']) => $cls)
     };
     let body = t.to_file_string().expect("python renders");
-    format!("# {}\n\n{}", BANNER.replace('\n', "\n# "), body)
+    format!("# {}\n\n{}", banner_with(banner_note).replace('\n', "\n# "), body)
 }
 
 /// `tables.gen.ts` — the typed `EntlTables` enum + `ENTL_TABLES`. Excludes
 /// `sync_state` (internal bookkeeping, never mirrored — matching introspect.ts).
-pub fn ts_tables(c: &Catalog) -> String {
+pub fn ts_tables(c: &Catalog, banner_note: Option<&str>) -> String {
     let defs = mirrored(c);
     let entries: Vec<js::Tokens> = defs
         .iter()
@@ -136,12 +145,12 @@ pub fn ts_tables(c: &Catalog) -> String {
         $("/** Every entl table name (the values of EntlTables). */")
         export const ENTL_TABLES = Object.values(EntlTables) as EntlTable[];
     };
-    format!("// {}\n\n{}", BANNER.replace('\n', "\n// "), t.to_file_string().expect("ts renders"))
+    format!("// {}\n\n{}", banner_with(banner_note).replace('\n', "\n// "), t.to_file_string().expect("ts renders"))
 }
 
 /// `schema.gen.ts` — the Drizzle (pg-core) schema for every mirrored table:
 /// the typed read contract for the Postgres/PGlite mirror.
-pub fn ts_drizzle(c: &Catalog) -> String {
+pub fn ts_drizzle(c: &Catalog, banner_note: Option<&str>) -> String {
     let defs = mirrored(c);
     let pg_schema = &js::import("drizzle-orm/pg-core", "pgSchema");
     let primary_key = &js::import("drizzle-orm/pg-core", "primaryKey");
@@ -210,7 +219,7 @@ pub fn ts_drizzle(c: &Catalog) -> String {
 
         $(for d in table_defs join ($['\n']) => $d)
     };
-    format!("// {}\n\n{}", BANNER.replace('\n', "\n// "), t.to_file_string().expect("ts renders"))
+    format!("// {}\n\n{}", banner_with(banner_note).replace('\n', "\n// "), t.to_file_string().expect("ts renders"))
 }
 
 /// The mirrored table set: everything except internal bookkeeping.

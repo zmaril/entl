@@ -15,7 +15,7 @@
   "scripts": {
     "build": "napi build --platform --release",
     "build:debug": "napi build --platform",
-    "gen": "cargo run -q -p fluessig --bin fluessig-gen -- ../fluessig/catalog.json ../entl-core/src/schema_gen.rs --docs ../fluessig/schema_docs.json --py-models ../entl-python/python/entl/models.py --ts-tables tables.gen.ts --ts-drizzle schema.gen.ts --api ../fluessig/api.json --node src/generated.rs --python ../entl-python/src/generated.rs --ruby ../entl-ruby/src/generated.rs",
+    "gen": "cargo run -q -p fluessig --bin fluessig-gen -- ../fluessig/catalog.json ../entl-core/src/schema_gen.rs --docs ../fluessig/schema_docs.json --py-models ../entl-python/python/entl/models.py --ts-tables tables.gen.ts --ts-drizzle schema.gen.ts --api ../fluessig/api.json --node src/generated.rs --python ../entl-python/src/generated.rs --ruby ../entl-ruby/src/generated.rs --banner-note 'straitjacket-allow-file:duplication — generated code repeats by design.'",
     "test": "bun test coverage.test.ts"
   },
   "devDependencies": {
