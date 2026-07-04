@@ -51,9 +51,8 @@ bun test                         # coverage test: the sink must cover every entl
 cd crates/entl-python
 uv venv && uv pip install maturin pytest
 # Use the venv's own maturin/python (NOT `uv run maturin` — its editable install can load a
-# stale .so after a rebuild). The forward-compat flag: the local interpreter (3.14) is newer
-# than pyo3's known-max; abi3 makes the wheel forward-compatible. Drop it once pyo3 catches up.
-PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 .venv/bin/maturin develop
+# stale .so after a rebuild).
+.venv/bin/maturin develop
 uv pip install sqlalchemy           # the `orm` extra, for entl.models + its test
 # entl.models is GENERATED from the fluessig catalog — regenerate via `bun run gen`
 # in crates/entl-node (one command regenerates every ORM artifact + the Rust schema).

@@ -20,7 +20,7 @@ use std::time::Duration;
 
 use entl_core::Db;
 use napi::bindgen_prelude::Result;
-use napi::threadsafe_function::{ErrorStrategy, ThreadsafeFunction, ThreadsafeFunctionCallMode};
+use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use napi_derive::napi;
 
 fn err(e: impl std::fmt::Display) -> napi::Error {
@@ -86,9 +86,14 @@ impl Entl {
         &self,
         repo_path: String,
         interval_secs: u32,
+        // napi 3: `CalleeHandled = false` is napi 2's `ErrorStrategy::Fatal` — the JS
+        // callback receives the value directly, with no error first-argument.
         #[napi(ts_arg_type = "(stats: SyncStats) => void")] on_sync: ThreadsafeFunction<
             SyncStats,
-            ErrorStrategy::Fatal,
+            (),
+            SyncStats,
+            napi::Status,
+            false,
         >,
     ) -> Result<WatchHandle> {
         let conn = self.core.worker().map_err(err)?.conn;

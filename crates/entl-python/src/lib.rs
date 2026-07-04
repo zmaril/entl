@@ -1,5 +1,5 @@
 //! PyO3 binding for the entl engine. The Rust sync engine runs in-process
-//! inside CPython; heavy calls release the GIL (`allow_threads`).
+//! inside CPython; heavy calls release the GIL (`detach`).
 //!
 //! **The PyO3 surface is GENERATED** (`generated.rs`, from the fluessig
 //! catalog's op layer — pyclasses, kwargs-flattened methods, iterator
