@@ -1,10 +1,8 @@
-# entl CI: the Rust engine + fluessig, the node and python bindings against their
-# suites, and the codegen-freshness gate (every generated artifact must match a
-# fresh regeneration — stale codegen is a build failure, not a surprise).
-#
-# Not here yet (follow-ups in todo.txt): the ruby binding (needs a ruby/libclang
-# toolchain on the runner), the executable-docs harness (needs the release CLI +
-# the addon + the venv together), Postgres-gated tests (ENTL_TEST_PG).
+# entl CI: the Rust engine + fluessig, all three bindings against their suites,
+# the codegen-freshness gate (every generated artifact must match a fresh
+# regeneration — stale codegen is a build failure, not a surprise), the Postgres
+# leg of the testkit round-trips, and the executable-docs harness (every code
+# block in the cookbook runs against a fixture repo).
 name: CI
 
 on:
@@ -81,3 +79,91 @@ jobs:
           .venv/bin/pip install --quiet maturin pytest sqlalchemy
           .venv/bin/maturin develop --quiet
           .venv/bin/python -m pytest tests/ -q
+
+  ruby:
+    name: ruby binding
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      # rb_sys drives cargo through extconf/make; bindgen finds the runner's
+      # libclang on its own (no LIBCLANG_PATH needed on ubuntu images).
+      - name: build + test
+        working-directory: crates/entl-ruby
+        run: |
+          gem install rb_sys minitest
+          ruby extconf.rb
+          make
+          ruby -I. -Itest test/test_entl.rb
+
+  postgres:
+    name: postgres sink (testkit round-trips)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: pg
+          POSTGRES_DB: entl
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # the same P1/P2/P3 properties as the rust job, but with the Postgres
+      # sink included (ENTL_TEST_PG gates it; embedded stores always run)
+      - run: cargo test -p entl-testkit
+        env:
+          ENTL_TEST_PG: postgres://postgres:pg@localhost:5432/entl
+          GIT_AUTHOR_NAME: ci
+          GIT_AUTHOR_EMAIL: ci@example.com
+          GIT_COMMITTER_NAME: ci
+          GIT_COMMITTER_EMAIL: ci@example.com
+
+  docs:
+    name: executable docs (cookbook blocks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # the harness skips when a prerequisite is missing, so build all three —
+      # the CLI, the napi addon, and the python venv — before running it.
+      - name: build the CLI (release)
+        run: cargo build --release
+      - name: build the napi addon
+        working-directory: crates/entl-node
+        run: |
+          bun install
+          bun run build
+      - name: build the python addon
+        working-directory: crates/entl-python
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --quiet maturin sqlalchemy
+          .venv/bin/maturin develop --quiet
+      # examples.test.ts is dependency-free (bun:test + node builtins), so no
+      # `bun install` in site/ — it would pull the whole docs toolchain for nothing.
+      # The existence checks keep the harness's skip-when-unbuilt behavior from
+      # turning a broken build step into a silently-green job.
+      - name: run every cookbook code block
+        working-directory: site
+        run: |
+          test -x ../target/release/entl
+          test -f ../crates/entl-node/index.js
+          test -x ../crates/entl-python/.venv/bin/python
+          bun test examples.test.ts
