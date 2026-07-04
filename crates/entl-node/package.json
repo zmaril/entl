@@ -1,7 +1,7 @@
 {
   "name": "@entl/node",
   "version": "0.0.0",
-  "description": "The entl engine (git + GitHub → DuckDB) as an in-process Node/Bun native addon.",
+  "description": "The entl engine (git + GitHub -> DuckDB) as an in-process Node/Bun native addon.",
   "main": "index.js",
   "types": "index.d.ts",
   "napi": {
@@ -15,7 +15,7 @@
   "scripts": {
     "build": "napi build --platform --release",
     "build:debug": "napi build --platform",
-    "gen": "bun run gen-tables.ts",
+    "gen": "cargo run -q -p fluessig --bin fluessig-gen -- ../fluessig/catalog.json ../entl-core/src/schema_gen.rs --docs ../fluessig/schema_docs.json --py-models ../entl-python/python/entl/models.py --ts-tables tables.gen.ts --ts-drizzle schema.gen.ts --api ../fluessig/api.json --node src/generated.rs --python ../entl-python/src/generated.rs --ruby ../entl-ruby/src/generated.rs",
     "test": "bun test coverage.test.ts"
   },
   "devDependencies": {
