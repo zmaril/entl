@@ -10,27 +10,11 @@ the Rust/Node runs. Point at another repo with ``ENTL_TEST_REPO``.
 
 import os
 import sqlite3
-import subprocess
-import tempfile
 
 import entl
+from conftest import make_repo
 
-
-def _fixture_repo():
-    """A self-contained two-commit repo (CI has no ~/projects to point at)."""
-    d = tempfile.mkdtemp()
-    repo = os.path.join(d, "repo")
-    subprocess.run(["git", "init", "-q", repo], check=True)
-    subprocess.run(["git", "-C", repo, "config", "user.email", "t@e.com"], check=True)
-    subprocess.run(["git", "-C", repo, "config", "user.name", "Tester"], check=True)
-    for i, name in enumerate(("a.txt", "b.txt")):
-        open(os.path.join(repo, name), "w").write(f"hello {i}\n")
-        subprocess.run(["git", "-C", repo, "add", "-A"], check=True)
-        subprocess.run(["git", "-C", repo, "commit", "-qm", f"commit {i}"], check=True)
-    return repo
-
-
-REPO = os.environ.get("ENTL_TEST_REPO") or _fixture_repo()
+REPO = os.environ.get("ENTL_TEST_REPO") or make_repo(commits=2)
 
 
 def _counts(db):

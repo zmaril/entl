@@ -4,30 +4,18 @@
 """
 
 import os
-import subprocess
 import tempfile
 
 import entl
 import pytest
+from conftest import make_repo
 from entl import models
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
 
-def fixture_repo():
-    d = tempfile.mkdtemp()
-    repo = os.path.join(d, "repo")
-    subprocess.run(["git", "init", "-q", repo], check=True)
-    subprocess.run(["git", "-C", repo, "config", "user.email", "t@e.com"], check=True)
-    subprocess.run(["git", "-C", repo, "config", "user.name", "Tester"], check=True)
-    open(os.path.join(repo, "a.txt"), "w").write("hello\n")
-    subprocess.run(["git", "-C", repo, "add", "-A"], check=True)
-    subprocess.run(["git", "-C", repo, "commit", "-qm", "first"], check=True)
-    return repo
-
-
 def test_query_sink_through_models():
-    repo = fixture_repo()
+    repo = make_repo()
     sp = os.path.join(tempfile.mkdtemp(), "data.sqlite")
     stats = entl.Entl(":memory:").sink(repo, entl.SinkTarget.Sqlite, path=sp, github=False)
 

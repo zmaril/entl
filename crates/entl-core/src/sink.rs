@@ -67,6 +67,18 @@ impl SinkSelect {
             .map(|(_, to)| to.clone())
             .unwrap_or_else(|| table.to_string())
     }
+
+    /// The shared `apply()` gate every sink opens with: `None` when the batch's
+    /// table is excluded, else the rename target and the batch's column names
+    /// in canonical (Appender) order.
+    pub fn gate(&self, batch: &ChangeBatch) -> Option<(String, Vec<String>)> {
+        if !self.included(&batch.table) {
+            return None;
+        }
+        let target = self.target(&batch.table);
+        let cols = batch.batch.schema().fields().iter().map(|f| f.name().clone()).collect();
+        Some((target, cols))
+    }
 }
 
 /// A sink applies change batches to a target. `apply` returns the number of rows it actually
@@ -168,10 +180,9 @@ impl JsonlSink {
 
 impl Sink for JsonlSink {
     fn apply(&mut self, batch: &ChangeBatch) -> Result<u64> {
-        if !self.select.included(&batch.table) {
-            return Ok(0);
-        }
-        let target = self.select.target(&batch.table); // rename → filename
+        let Some((target, _)) = self.select.gate(batch) else {
+            return Ok(0); // excluded table (target doubles as the filename)
+        };
         if !self.files.contains_key(&target) {
             let path = self.dir.join(format!("{target}.jsonl"));
             let f = OpenOptions::new()
@@ -331,17 +342,9 @@ impl SqliteSink {
 
 impl Sink for SqliteSink {
     fn apply(&mut self, batch: &ChangeBatch) -> Result<u64> {
-        if !self.select.included(&batch.table) {
+        let Some((target, cols)) = self.select.gate(batch) else {
             return Ok(0);
-        }
-        let target = self.select.target(&batch.table);
-        let cols: Vec<String> = batch
-            .batch
-            .schema()
-            .fields()
-            .iter()
-            .map(|f| f.name().clone())
-            .collect();
+        };
         let pk = self.ensure(&batch.table, &target, &cols)?;
 
         if batch.op == ChangeOp::Replace && self.cleared.insert(target.clone()) {
@@ -510,17 +513,9 @@ impl PostgresSink {
 
 impl Sink for PostgresSink {
     fn apply(&mut self, batch: &ChangeBatch) -> Result<u64> {
-        if !self.select.included(&batch.table) {
+        let Some((target, cols)) = self.select.gate(batch) else {
             return Ok(0);
-        }
-        let target = self.select.target(&batch.table);
-        let cols: Vec<String> = batch
-            .batch
-            .schema()
-            .fields()
-            .iter()
-            .map(|f| f.name().clone())
-            .collect();
+        };
         let pk = self.ensure(&batch.table, &target, batch)?;
 
         if batch.op == ChangeOp::Replace && self.cleared.insert(target.clone()) {

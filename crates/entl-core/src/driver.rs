@@ -138,13 +138,10 @@ impl<E: FnMut(Statement) -> Result<()>> DriverSink<E> {
 
 impl<E: FnMut(Statement) -> Result<()>> Sink for DriverSink<E> {
     fn apply(&mut self, batch: &ChangeBatch) -> Result<u64> {
-        if !self.select.included(&batch.table) {
+        let Some((target, cols)) = self.select.gate(batch) else {
             return Ok(0);
-        }
+        };
         debug_assert_eq!(self.dialect, Dialect::Postgres);
-        let target = self.select.target(&batch.table);
-        let cols: Vec<String> =
-            batch.batch.schema().fields().iter().map(|f| f.name().clone()).collect();
         let pk = self.ensure(&batch.table, &target, &cols)?;
 
         if batch.op == ChangeOp::Replace && self.cleared.insert(target.clone()) {
