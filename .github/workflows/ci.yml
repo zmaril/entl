@@ -90,6 +90,13 @@ jobs:
       # libclang on its own (no LIBCLANG_PATH needed on ubuntu images).
       - name: build + test
         working-directory: crates/entl-ruby
+        env:
+          # Build into the workspace target dir so rust-cache covers the deps,
+          # in the dev profile — CI tests don't need optimized code. Together
+          # these turn the from-scratch release rebuild (~12 min) into an
+          # incremental cached one.
+          RB_SYS_CARGO_PROFILE: dev
+          RB_SYS_CARGO_TARGET_DIR: ${{ github.workspace }}/target
         run: |
           bundle exec ruby extconf.rb
           make
