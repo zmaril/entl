@@ -1,5 +1,9 @@
 //! GitHub → DuckDB ingest (notes/design/engine.md).
 //!
+//! straitjacket-allow-file:duplication — the PR and issue pipelines are
+//! deliberate twins (paginate → watermark → delete-then-append per subject);
+//! the shared halves already live in emit_keys/emit_subject/write_labeled.
+//!
 //! Transport: octocrab. GraphQL batches the PR graph + issues (each PR node
 //! carries reviews/commits/comments inline); REST drives Actions/CI (no GraphQL
 //! API). Repo identity (`repo_id`) is the same path-hash the git side uses, so

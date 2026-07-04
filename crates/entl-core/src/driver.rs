@@ -154,7 +154,7 @@ impl<E: FnMut(Statement) -> Result<()>> Sink for DriverSink<E> {
 
         // One upsert per row; params in column order. Cache the SQL per target.
         if !self.insert_sql.contains_key(&target) {
-            let sql = pg_insert_sql(&self.qualified(&target), &cols, &pk);
+            let sql = crate::sink::upsert_sql(&self.qualified(&target), &cols, &pk, crate::sink::Ph::Dollar);
             self.insert_sql.insert(target.clone(), sql);
         }
         let sql = self.insert_sql[&target].clone();
@@ -164,27 +164,6 @@ impl<E: FnMut(Statement) -> Result<()>> Sink for DriverSink<E> {
             (self.emit)(Statement { sql: sql.clone(), params, table: Some(batch.table.clone()) })?;
         }
         Ok(batch.batch.num_rows() as u64)
-    }
-}
-
-/// Build a Postgres upsert (`$n` placeholders) for `table` (already quoted/qualified).
-fn pg_insert_sql(table: &str, cols: &[String], pk: &[String]) -> String {
-    let quoted = cols.iter().map(|c| format!("\"{c}\"")).collect::<Vec<_>>().join(", ");
-    let ph = (1..=cols.len()).map(|i| format!("${i}")).collect::<Vec<_>>().join(", ");
-    if pk.is_empty() {
-        return format!("INSERT INTO {table} ({quoted}) VALUES ({ph})");
-    }
-    let conflict = pk.iter().map(|c| format!("\"{c}\"")).collect::<Vec<_>>().join(", ");
-    let non_pk: Vec<&String> = cols.iter().filter(|c| !pk.contains(c)).collect();
-    if non_pk.is_empty() {
-        format!("INSERT INTO {table} ({quoted}) VALUES ({ph}) ON CONFLICT ({conflict}) DO NOTHING")
-    } else {
-        let set = non_pk
-            .iter()
-            .map(|c| format!("\"{c}\" = EXCLUDED.\"{c}\""))
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!("INSERT INTO {table} ({quoted}) VALUES ({ph}) ON CONFLICT ({conflict}) DO UPDATE SET {set}")
     }
 }
 
@@ -302,7 +281,7 @@ mod tests {
         assert!(sqls[1].contains("CREATE TABLE IF NOT EXISTS \"mine\".\"commits\""));
         assert_eq!(sqls[2], "DELETE FROM \"mine\".\"commits\"");
         assert!(sqls[3].contains("INSERT INTO \"mine\".\"commits\""));
-        assert!(sqls[3].contains("ON CONFLICT (\"oid\") DO UPDATE SET \"message\" = EXCLUDED.\"message\""));
+        assert!(sqls[3].contains("ON CONFLICT (\"oid\") DO UPDATE SET \"message\" = excluded.\"message\""));
         // The oid param is hex text, not raw bytes.
         assert_eq!(out[3].params[0], Value::String("abcd".into()));
         assert_eq!(out[3].params[1], Value::String("hello".into()));

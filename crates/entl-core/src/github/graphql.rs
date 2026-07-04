@@ -1,4 +1,7 @@
 //! GraphQL query + response types for the PR graph. One query pulls each PR with
+//!
+//! straitjacket-allow-file:duplication — the DTOs mirror GitHub's wire schema;
+//! PR and issue payloads are similar because the API's shapes are.
 //! its reviews, commits, review-comments, requested reviewers, and issue comments
 //! inline (notes/design/engine.md — this is the batching win over per-PR REST calls).
 

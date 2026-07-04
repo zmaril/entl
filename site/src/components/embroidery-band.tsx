@@ -1,8 +1,9 @@
 // A folk cross-stitch band — a repeating flower + zigzag motif, in the duckling
 // palette. Used as a textured strip along the bottom of the hero.
 export function EmbroideryBand({ className }: { className?: string }) {
-  const y = '#f4cf3f';
-  const yd = '#e3bb24';
+  // the duckling palette, from the theme tokens in global.css
+  const y = 'var(--entl-yellow)';
+  const yd = 'var(--entl-yellow-dark)';
   // one cross-stitch flower: 8 petals around a centre, each a small square
   const stitch = (cx: number, cy: number, fill: string, opacity = 1) => (
     <rect key={`${cx}-${cy}`} x={cx - 2} y={cy - 2} width={4} height={4} fill={fill} opacity={opacity} rx={0.5} />

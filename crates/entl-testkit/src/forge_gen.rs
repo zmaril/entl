@@ -1,4 +1,6 @@
 //! proptest generator for [`ForgeWorld`]. Produces valid, varied forge state with unique natural
+//!
+//! straitjacket-allow-file:duplication — proptest generator arms are parallel by shape.
 //! keys (user ids, PR/issue numbers, review/comment ids) assigned by counters so the ingest's
 //! primary keys never collide. Commit references are indices (the mock clamps them to real OIDs).
 

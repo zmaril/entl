@@ -1,5 +1,7 @@
 //! Stream a repo's git + forge changes into a directory of `<table>.jsonl` files.
 //!
+//! straitjacket-allow-file:duplication — example code intentionally mirrors the docs.
+//!
 //!   cargo run -p entl-core --example sink_jsonl -- /path/to/repo /out/dir
 //!
 //! Read-only over the repo; forge needs a token (`gh auth token` / GH_TOKEN).

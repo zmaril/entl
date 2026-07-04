@@ -1,3 +1,5 @@
+<!-- straitjacket-allow-file:duplication — design notes quote repo trees and config blocks verbatim. -->
+
 # Entl docs site — software design
 
 The design of the documentation site under `site/`. This is about *how the site is built*,
