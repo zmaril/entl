@@ -4,10 +4,15 @@ on:
     branches: [main]
   pull_request:
 
+# security-events lets the action upload its SARIF to code scanning, so findings
+# land as PR diff annotations (with both endpoints of each duplication clone).
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   straitjacket:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: curl -fsSL https://raw.githubusercontent.com/zmaril/straitjacket/main/install.sh | sh
-      - run: straitjacket
+      - uses: zmaril/straitjacket@main
