@@ -130,6 +130,16 @@ fn param_sig(api: &ApiDoc, op: &ApiOp) -> Vec<(String, String)> {
         .collect()
 }
 
+/// The `(snake name, "n: ty, …" param list, rust return type)` triple every
+/// per-op emission loop opens with.
+fn op_sig(api: &ApiDoc, op: &ApiOp) -> (String, String, String) {
+    let name = snake(&op.name);
+    let params: Vec<String> =
+        param_sig(api, op).iter().map(|(n, r)| format!("{n}: {r}")).collect();
+    let (ret, _) = ty(api, &op.returns);
+    (name, params.join(", "), ret)
+}
+
 /// The `<Interface>Core` traits — identical across every language's generated
 /// file (each binding implements them once via `entl_core::binding_core_impls!`).
 fn emit_core_traits(t: &mut rust::Tokens, api: &ApiDoc) {
@@ -140,11 +150,7 @@ fn emit_core_traits(t: &mut rust::Tokens, api: &ApiDoc) {
             if op.shape == Shape::Manual {
                 continue;
             }
-            let name = snake(&op.name);
-            let params: Vec<String> =
-                param_sig(api, op).iter().map(|(n, r)| format!("{n}: {r}")).collect();
-            let ps = params.join(", ");
-            let (ret, _) = ty(api, &op.returns);
+            let (name, ps, ret) = op_sig(api, op);
             let sig = match op.shape {
                 Shape::Ctor => format!("fn {name}({ps}) -> anyhow::Result<Self>"),
                 Shape::Stream => {
