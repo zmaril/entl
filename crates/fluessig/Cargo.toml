@@ -1,0 +1,12 @@
+[package]
+name = "fluessig"
+version.workspace = true
+edition.workspace = true
+license = "MIT OR Apache-2.0"
+description = "Describe a typed entity graph once (TypeSpec); project it everywhere — DDL, ORM models, format codecs, language bindings, and an Arrow-fed data plane."
+
+[dependencies]
+genco = "0.19.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"

@@ -1,10 +1,10 @@
 [workspace]
 resolver = "2"
-members = ["crates/entl-core", "crates/entl-cli", "crates/entl-node", "crates/entl-python", "crates/entl-ruby", "crates/entl-testkit"]
+members = ["crates/entl-core", "crates/entl-cli", "crates/entl-node", "crates/entl-python", "crates/entl-ruby", "crates/entl-testkit", "crates/fluessig"]
 # entl-node (napi) and entl-python (PyO3) build via their own toolchains
 # (@napi-rs/cli / maturin), not plain `cargo build`, so keep them out of the
-# default set to keep CLI/core builds fast.
-default-members = ["crates/entl-core", "crates/entl-cli"]
+# default set to keep CLI/core builds fast. fluessig is pure Rust → default.
+default-members = ["crates/entl-core", "crates/entl-cli", "crates/fluessig"]
 
 [workspace.package]
 version = "0.0.0"
