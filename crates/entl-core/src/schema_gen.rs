@@ -10,6 +10,8 @@
 //! Regenerate:
 //!   cargo run -p fluessig --bin fluessig-gen -- \
 //!     crates/fluessig/catalog.json crates/entl-core/src/schema_gen.rs
+//!
+//! straitjacket-allow-file:duplication — generated code repeats by design.
 
 /// One table's schema, as code.
 pub struct TableSchema {
