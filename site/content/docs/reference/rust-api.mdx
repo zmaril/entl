@@ -42,6 +42,7 @@ impl Db {
     fn migrate(&self) -> Result<()>;
     fn table_count(&self) -> Result<i64>;
     fn query_table(&self, sql: &str) -> Result<String>;
+    fn query_arrow_ipc(&self, sql: &str) -> Result<Vec<u8>>;
 }
 ```
 
@@ -695,6 +696,32 @@ Drive a sink off a change stream until it closes. Returns rows actually written.
 
 ```rust
 fn drain(stream: &ChangeStream, sink: &mut dyn Sink, idle: Duration) -> Result<u64>
+```
+
+### `batch_ipc`
+
+One `RecordBatch` as an Arrow IPC stream (schema + the batch + EOS) — the
+bytes a binding hands its host language when a pointer can't cross (arrow JS
+speaks IPC only; red-arrow stays optional). The `arrow` crate here is the
+same one duckdb re-exports (cargo unifies the version), so no cross-version
+copying happens on the way in.
+
+```rust
+fn batch_ipc(batch: &RecordBatch) -> anyhow::Result<Vec<u8>>
+```
+
+### `batch_to_ffi`
+
+Export a batch through the **Arrow C Data Interface**: the `(array, schema)`
+FFI structs for a struct-array view of the rows. The caller moves them into
+its language's capsule/pointer mechanism (e.g. Python PyCapsules) for a
+zero-copy handoff; their `Drop` honors the release callback, so an
+unconsumed export cannot leak.
+
+```rust
+fn batch_to_ffi(
+    batch: &RecordBatch,
+) -> anyhow::Result<(arrow::ffi::FFI_ArrowArray, arrow::ffi::FFI_ArrowSchema)>
 ```
 
 ### `change_channel`

@@ -53,7 +53,9 @@ uv venv && uv pip install maturin pytest
 # Use the venv's own maturin/python (NOT `uv run maturin` — its editable install can load a
 # stale .so after a rebuild).
 .venv/bin/maturin develop
-uv pip install sqlalchemy           # the `orm` extra, for entl.models + its test
+uv pip install sqlalchemy pyarrow   # the `orm` + `arrow` extras: entl.models, and the Arrow
+                                    # tests / docs-harness recipes (entl itself ships no pyarrow —
+                                    # ChangeBatch speaks the PyCapsule interface, consumers bring Arrow)
 # entl.models is GENERATED from the fluessig catalog — regenerate via `bun run gen`
 # in crates/entl-node (one command regenerates every ORM artifact + the Rust schema).
 .venv/bin/python -m pytest tests/   # sink/extract/rebuild/matrix + the SQLAlchemy models
@@ -137,6 +139,10 @@ maturin develop`), and the CLI (`cargo build --release`). The docs generator rea
   whose source is missing and keeps the committed copy.
 - The docs reference generator escapes MDX-special chars in ported prose (`{`/`}`/`|`); see
   notes/design/docs.md if a schema comment breaks the build.
+- entl-core's direct `arrow` dependency must stay in **version-lockstep with the arrow that
+  the duckdb crate depends on** (cargo then unifies them into one crate, keeping `RecordBatch`
+  a single type). On a duckdb bump, bump `arrow` to duckdb's arrow major — two arrows in
+  Cargo.lock means the Arrow handoff stops compiling.
 
 ## Working agreement
 

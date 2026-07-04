@@ -53,7 +53,7 @@ export async function syncInto(
   for (;;) {
     const stmt = await plan.next();
     if (stmt === null) break;
-    const params = JSON.parse(stmt.params) as unknown[]; // JSON until the Arrow C-FFI handoff
+    const params = JSON.parse(stmt.params) as unknown[]; // params stay JSON by design: per-row and tiny (the Arrow handoff covers row payloads, not statements)
     await pg.query(stmt.sql, params);
     // A row upsert (has bound params) tallies against its source table.
     if (stmt.table && params.length > 0) counts[stmt.table] = (counts[stmt.table] ?? 0) + 1;

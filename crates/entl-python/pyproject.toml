@@ -22,3 +22,7 @@ module-name = "entl._entl"
 [project.optional-dependencies]
 # The SQLAlchemy read-plane models (entl.models) need SQLAlchemy; the engine itself does not.
 orm = ["sqlalchemy>=2.0"]
+# Consuming the Arrow surfaces (ChangeBatch capsules / ipc(), query_arrow) needs an Arrow
+# implementation on the CONSUMER side only — entl itself ships none (the PyCapsule
+# interface is an ABI). This extra is a convenience for tests and notebooks.
+arrow = ["pyarrow>=14"]

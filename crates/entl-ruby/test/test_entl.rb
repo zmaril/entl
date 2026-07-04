@@ -36,4 +36,39 @@ class TestEntl < Minitest::Test
       assert_equal "Tester", snapshot["commits"].first["author_name"]
     end
   end
+
+  # The Arrow IPC stream format opens with the 0xFFFFFFFF continuation marker.
+  IPC_MARKER = "\xFF\xFF\xFF\xFF".b
+
+  def test_changes_and_query_arrow_yield_ipc_streams
+    Dir.mktmpdir do |dir|
+      repo = fixture_repo(dir)
+      e = Entl.new(":memory:")
+
+      tables = []
+      stream = e.changes(repo, false)
+      while (batch = stream.next)
+        tables << batch.table
+        assert_includes %w[insert update upsert delete replace], batch.op
+        ipc = batch.ipc
+        assert_equal Encoding::BINARY, ipc.encoding
+        assert ipc.bytesize > 8, "IPC payload should be non-trivial"
+        assert ipc.start_with?(IPC_MARKER), "IPC stream starts with the continuation marker"
+      end
+      assert_includes tables, "commits"
+
+      ipc = e.query_arrow("SELECT 1 AS x")
+      assert_equal Encoding::BINARY, ipc.encoding
+      assert ipc.start_with?(IPC_MARKER)
+
+      # Decode fully only when the (heavy, optional) red-arrow gem is around.
+      begin
+        require "arrow"
+        decoded = Arrow::RecordBatchStreamReader.new(Arrow::Buffer.new(ipc)).read_all
+        assert_equal 1, decoded.n_rows
+      rescue LoadError
+        # IPC marker + size assertions above are the gem-free floor.
+      end
+    end
+  end
 end

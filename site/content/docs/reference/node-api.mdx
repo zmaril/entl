@@ -29,6 +29,11 @@ class Entl {
   loadGithub(repoPath: string): Promise<GithubStats>
   /** Run a SQL query; JSON rows back. */
   query(sql: string): Promise<string>
+  /**
+   * Run a SQL query; the result as one Arrow IPC stream (schema + all batches) —
+   * the dataframe on-ramp (pyarrow → pandas/polars, apache-arrow JS, red-arrow).
+   */
+  queryArrow(sql: string): Promise<Buffer>
   /** Pull `repoPath` and sync it into a target store, in one call. */
   sink(repoPath: string, options: SinkOptions): Promise<SinkStats>
   /** Read a store back into canonical rows (JSON; oids hex, timestamps RFC3339). */
@@ -52,6 +57,26 @@ class Entl {
 
 ## Functions
 
+### `branchExists`
+
+```ts
+function branchExists(repoPath: string, name: string): Promise<boolean>
+```
+
+### `commitBodies`
+
+Commit subjects+bodies along a branch (JSON).
+
+```ts
+function commitBodies(repoPath: string, branch: string): Promise<string>
+```
+
+### `currentBranch`
+
+```ts
+function currentBranch(repoPath: string): Promise<string>
+```
+
 ### `diffCommits`
 
 Diff two commits (`base...head` when threeDot).
@@ -68,26 +93,6 @@ A file's content at a commit — null when absent or binary.
 function fileAt(repoPath: string, commit: string, path: string): Promise<string | null>
 ```
 
-### `branchExists`
-
-```ts
-function branchExists(repoPath: string, name: string): Promise<boolean>
-```
-
-### `currentBranch`
-
-```ts
-function currentBranch(repoPath: string): Promise<string>
-```
-
-### `commitBodies`
-
-Commit subjects+bodies along a branch (JSON).
-
-```ts
-function commitBodies(repoPath: string, branch: string): Promise<string>
-```
-
 ### `lsRemoteHeads`
 
 Remote branch names matching a pattern (trailing-`*` glob). Fetches first.
@@ -99,169 +104,16 @@ function lsRemoteHeads(repoPath: string, pattern: string): Promise<string[]>
 
 ## Types
 
-### `GitStats`
-
-What one git load produced.
-
-```ts
-interface GitStats {
-  newCommits: number
-  fileChanges: number
-  refs: number
-}
-```
-
-### `GithubStats`
-
-What one GitHub load produced.
-
-```ts
-interface GithubStats {
-  events: number
-  pullRequests: number
-  reviews: number
-  reviewComments: number
-  issues: number
-  comments: number
-  workflowRuns: number
-  checkRuns: number
-  users: number
-}
-```
-
-### `SinkStats`
-
-What a sink() cycle produced: git + forge counts, and rows applied to the target.
-
-```ts
-interface SinkStats {
-  newCommits: number
-  fileChanges: number
-  refs: number
-  pullRequests: number
-  issues: number
-  events: number
-  workflowRuns: number
-  checkRuns: number
-  rows: number
-}
-```
-
-### `FileDiff`
-
-One changed file between two commits.
-
-```ts
-interface FileDiff {
-  path: string
-  oldPath?: string
-  status: string
-  additions: number
-  deletions: number
-  patch: string
-}
-```
-
 ### `ChangeBatch`
 
-One change-stream batch (rows as JSON until the Arrow C-FFI handoff lands).
+One change-stream batch. The rows stay columnar (Arrow): `ipc` yields them as one Arrow IPC stream (a single RecordBatch, schema included), and the Python class additionally speaks the Arrow PyCapsule protocol for zero-copy import (`pa.record_batch(batch)`). Values are native Arrow types — oids are Binary, timestamps Timestamp(µs) — unlike query()/extract()'s canonical JSON (hex oids, RFC3339). No per-row `_op`: `op`/`table` ride this envelope.
 
 ```ts
-interface ChangeBatch {
-  table: string
-  op: string
-  rowsJson: string
-}
-```
-
-### `Statement`
-
-One driver-plan statement: the host runs it verbatim against its own client.
-
-```ts
-interface Statement {
-  sql: string
-  params: string
-  table?: string
-}
-```
-
-### `TableRename`
-
-```ts
-interface TableRename {
-  from: string
-  to: string
-}
-```
-
-### `SinkOptions`
-
-```ts
-interface SinkOptions {
-  target: SinkTarget
-  path?: string
-  github?: boolean
-  tables?: Array<string>
-  exclude?: Array<string>
-  rename?: Array<TableRename>
-  schema?: string
-  objects?: boolean
-}
-```
-
-### `ExtractOptions`
-
-```ts
-interface ExtractOptions {
-  source: string
-  path: string
-  tables?: Array<string>
-  schema?: string
-}
-```
-
-### `RebuildOptions`
-
-```ts
-interface RebuildOptions {
-  source: string
-  dest: string
-  out: string
-  schema?: string
-}
-```
-
-### `ChangesOptions`
-
-```ts
-interface ChangesOptions {
-  github?: boolean
-  objects?: boolean
-}
-```
-
-### `DriverPlanOptions`
-
-```ts
-interface DriverPlanOptions {
-  tables?: Array<string>
-  exclude?: Array<string>
-  rename?: Array<TableRename>
-  schema?: string
-}
-```
-
-### `SyncStats`
-
-```ts
-interface SyncStats {
-  newCommits: number
-  fileChanges: number
-  events: number
-  pullRequests: number
-  issues: number
-  workflowRuns: number
+class ChangeBatch {
+  get table(): string
+  get op(): string
+  /** The rows as one Arrow IPC stream — decode with `tableFromIPC` (apache-arrow). */
+  get ipc(): Buffer
 }
 ```
 
@@ -293,5 +145,159 @@ Handle to a running `watch` loop. Call `stop()` to end it.
 class WatchHandle {
   /** Stop the watch loop (takes effect after the current cycle). */
   stop(): void
+}
+```
+
+### `ChangesOptions`
+
+```ts
+interface ChangesOptions {
+  github?: boolean
+  objects?: boolean
+}
+```
+
+### `DriverPlanOptions`
+
+```ts
+interface DriverPlanOptions {
+  tables?: Array<string>
+  exclude?: Array<string>
+  rename?: Array<TableRename>
+  schema?: string
+}
+```
+
+### `ExtractOptions`
+
+```ts
+interface ExtractOptions {
+  source: string
+  path: string
+  tables?: Array<string>
+  schema?: string
+}
+```
+
+### `FileDiff`
+
+One changed file between two commits.
+
+```ts
+interface FileDiff {
+  path: string
+  oldPath?: string
+  status: string
+  additions: number
+  deletions: number
+  patch: string
+}
+```
+
+### `GithubStats`
+
+What one GitHub load produced.
+
+```ts
+interface GithubStats {
+  events: number
+  pullRequests: number
+  reviews: number
+  reviewComments: number
+  issues: number
+  comments: number
+  workflowRuns: number
+  checkRuns: number
+  users: number
+}
+```
+
+### `GitStats`
+
+What one git load produced.
+
+```ts
+interface GitStats {
+  newCommits: number
+  fileChanges: number
+  refs: number
+}
+```
+
+### `RebuildOptions`
+
+```ts
+interface RebuildOptions {
+  source: string
+  dest: string
+  out: string
+  schema?: string
+}
+```
+
+### `SinkOptions`
+
+```ts
+interface SinkOptions {
+  target: SinkTarget
+  path?: string
+  github?: boolean
+  tables?: Array<string>
+  exclude?: Array<string>
+  rename?: Array<TableRename>
+  schema?: string
+  objects?: boolean
+}
+```
+
+### `SinkStats`
+
+What a sink() cycle produced: git + forge counts, and rows applied to the target.
+
+```ts
+interface SinkStats {
+  newCommits: number
+  fileChanges: number
+  refs: number
+  pullRequests: number
+  issues: number
+  events: number
+  workflowRuns: number
+  checkRuns: number
+  rows: number
+}
+```
+
+### `Statement`
+
+One driver-plan statement: the host runs it verbatim against its own client.
+
+```ts
+interface Statement {
+  sql: string
+  params: string
+  table?: string
+}
+```
+
+### `SyncStats`
+
+```ts
+interface SyncStats {
+  newCommits: number
+  fileChanges: number
+  events: number
+  pullRequests: number
+  issues: number
+  workflowRuns: number
+}
+```
+
+### `TableRename`
+
+```ts
+interface TableRename {
+  from: string
+  to: string
 }
 ```
