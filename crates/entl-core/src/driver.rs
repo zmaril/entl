@@ -21,7 +21,16 @@ use crossbeam_channel::{bounded, Receiver, RecvTimeoutError, Sender};
 use serde_json::Value;
 use std::time::Duration;
 
-use crate::migrations::{instantiate, PG_TABLES};
+// Schema + keys come from the GENERATED module `schema_gen` — the entl catalog
+// (crates/fluessig/entl.tsp) lowered to committed Rust source by fluessig-gen.
+// No runtime parsing/rendering: the schema is code (like tables.gen.ts /
+// models.py); a regenerates-identically test in fluessig guards drift.
+use crate::schema_gen::{TableSchema, PG_TABLES};
+
+/// The Postgres schema of a canonical table, from the generated catalog.
+fn table_schema(canonical: &str) -> Option<&'static TableSchema> {
+    PG_TABLES.iter().find(|t| t.name == canonical)
+}
 use crate::sink::{cell_json, Sink, SinkSelect};
 use crate::stream::{ChangeBatch, ChangeOp};
 
@@ -90,9 +99,10 @@ impl<E: FnMut(Statement) -> Result<()>> DriverSink<E> {
         }
     }
 
-    /// Ensure the target table exists (emit its `CREATE`) and cache its PK. The PK is read from the
-    /// template DDL — the driver can't query the remote catalog, so the schema is the source of
-    /// truth (which it is: the templates are ours).
+    /// Ensure the target table exists (emit its `CREATE`) and cache its PK. Schema + keys come
+    /// from the generated [`schema_gen`](crate::schema_gen) module — the fluessig catalog as
+    /// committed code. (Previously: entl's SQL templates, re-parsed with `parse_pk`; the fluessig
+    /// parity gate proved the two identical.)
     fn ensure(&mut self, canonical: &str, target: &str, cols: &[String]) -> Result<Vec<String>> {
         if let Some(pk) = self.ensured.get(target) {
             return Ok(pk.clone());
@@ -102,19 +112,19 @@ impl<E: FnMut(Statement) -> Result<()>> DriverSink<E> {
             (self.emit)(Statement { sql, params: vec![], table: None })?;
             self.schema_made = true;
         }
-        // The template carries the real typed schema + PK; substitute the (schema-qualified) name.
+        // Instantiate the table's DDL template at the (possibly renamed, schema-qualified) name.
         let repl = match &self.schema {
             Some(s) => format!("{s}\".\"{target}"),
             None => target.to_string(),
         };
-        let pk = match instantiate(PG_TABLES, canonical, &repl) {
-            Some(ddl) => {
-                let pk = parse_pk(&ddl);
+        let pk = match table_schema(canonical) {
+            Some(ts) => {
+                let ddl = ts.ddl.replace("__table__", &repl);
                 (self.emit)(Statement { sql: ddl, params: vec![], table: Some(canonical.to_string()) })?;
-                pk
+                ts.pk.iter().map(|s| s.to_string()).collect()
             }
             None => {
-                // No template — a typeless create from the batch columns (all text), no PK.
+                // Not in the catalog — a typeless create from the batch columns (all text), no PK.
                 let cols_ddl = cols.iter().map(|c| format!("\"{c}\" text")).collect::<Vec<_>>().join(", ");
                 let sql = format!("CREATE TABLE IF NOT EXISTS {} ({cols_ddl})", self.qualified(target));
                 (self.emit)(Statement { sql, params: vec![], table: Some(canonical.to_string()) })?;
@@ -178,34 +188,6 @@ fn pg_insert_sql(table: &str, cols: &[String], pk: &[String]) -> String {
     }
 }
 
-/// The primary-key columns declared in a `CREATE TABLE` template — either the table-level
-/// `PRIMARY KEY ("a", "b")` or an inline `"col" type PRIMARY KEY`. We own the templates, so this
-/// only needs to handle the two forms they use.
-fn parse_pk(ddl: &str) -> Vec<String> {
-    // Table-level: PRIMARY KEY ( ... )
-    if let Some(open) = ddl.find("PRIMARY KEY (") {
-        let rest = &ddl[open + "PRIMARY KEY (".len()..];
-        if let Some(close) = rest.find(')') {
-            return rest[..close]
-                .split(',')
-                .map(|c| c.trim().trim_matches('"').to_string())
-                .filter(|c| !c.is_empty())
-                .collect();
-        }
-    }
-    // Inline: a column line ending in `PRIMARY KEY` (no following `(`).
-    for line in ddl.lines() {
-        if line.contains("PRIMARY KEY") && !line.contains("PRIMARY KEY (") {
-            if let Some(start) = line.find('"') {
-                if let Some(end) = line[start + 1..].find('"') {
-                    return vec![line[start + 1..start + 1 + end].to_string()];
-                }
-            }
-        }
-    }
-    Vec::new()
-}
-
 /// The result of a [`StatementStream`] poll — mirrors [`Poll`](crate::stream::Poll).
 #[derive(Debug)]
 pub enum StmtPoll {
@@ -266,10 +248,11 @@ pub fn backfill(conn: &duckdb::Connection, sink: &mut dyn Sink, tables: &[&str])
     Ok(total)
 }
 
-/// The tables a driver/Postgres sink can mirror (those with a Postgres template) — the default
-/// backfill set. Kept in sync with [`PG_TABLES`](crate::migrations::PG_TABLES).
+/// The tables a driver sink can mirror — the default backfill set: every physical table the
+/// catalog describes (entity + association/edge tables). Catalog-driven, so a table added to
+/// `entl.tsp` joins the mirror on regeneration.
 pub fn driver_tables() -> Vec<&'static str> {
-    PG_TABLES.iter().map(|(n, _)| *n).collect()
+    PG_TABLES.iter().map(|t| t.name).collect()
 }
 
 #[cfg(test)]
@@ -281,13 +264,13 @@ mod tests {
     use std::sync::Arc;
 
     #[test]
-    fn parse_pk_handles_both_forms() {
-        assert_eq!(parse_pk("CREATE TABLE \"x\" (\n  \"oid\" text PRIMARY KEY,\n  \"a\" text\n)"), vec!["oid"]);
-        assert_eq!(
-            parse_pk("CREATE TABLE \"x\" (\n  \"commit_oid\" text,\n  \"idx\" integer,\n  PRIMARY KEY (\"commit_oid\", \"idx\")\n)"),
-            vec!["commit_oid", "idx"]
-        );
-        assert!(parse_pk("CREATE TABLE \"x\" (\"a\" text)").is_empty());
+    fn keys_come_from_the_generated_catalog() {
+        // parse_pk is gone: the generated schema module is the source of truth for keys.
+        assert_eq!(table_schema("commits").unwrap().pk, ["oid"]);
+        assert_eq!(table_schema("commit_parents").unwrap().pk, ["commit_oid", "idx"]);
+        assert_eq!(table_schema("gh_pull_requests").unwrap().pk, ["repo_id", "number"]);
+        // and the backfill set is catalog-driven (all 28 physical tables)
+        assert_eq!(driver_tables().len(), 28);
     }
 
     #[test]

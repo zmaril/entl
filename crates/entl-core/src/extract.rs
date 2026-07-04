@@ -52,14 +52,9 @@ fn sort_rows(rows: &mut [Row]) {
 }
 
 /// Every BOOLEAN `(table, column)` in the entl schema — for coercing SQLite's 0/1 when no DuckDB
-/// reference connection is available (e.g. reading a standalone SQLite/Postgres store).
-pub const BOOL_COLUMNS: &[(&str, &str)] = &[
-    ("commits", "is_merge"),
-    ("commits", "gpg_signed"),
-    ("refs", "is_symbolic"),
-    ("blobs", "is_binary"),
-    ("gh_pull_requests", "is_draft"),
-];
+/// reference connection is available. Generated from the catalog (`schema_gen`), so it can't
+/// silently miss a column — the old hand-kept list here missed `conflicts.unresolved`.
+pub use crate::schema_gen::BOOL_COLUMNS;
 
 fn static_bool_columns() -> HashSet<(String, String)> {
     BOOL_COLUMNS.iter().map(|(t, c)| (t.to_string(), c.to_string())).collect()

@@ -646,7 +646,8 @@ fn write_issue_page(
         for c in &is.comments.nodes {
             let Some(cid) = c.database_id else { continue };
             let aid = record(users, &c.author);
-            cm_app.append_row(params![cid, repo_id, "issue", is.number, aid, c.body, ts(c.created_at)])?;
+            // generated column order: (id, subject_type, repo_id, subject_number, …)
+            cm_app.append_row(params![cid, "issue", repo_id, is.number, aid, c.body, ts(c.created_at)])?;
             stats.comments += 1;
         }
     }
@@ -804,7 +805,8 @@ fn write_pr_page(
         for c in &pr.comments.nodes {
             let Some(cid) = c.database_id else { continue };
             let aid = record(users, &c.author);
-            cm_app.append_row(params![cid, repo_id, "pr", pr.number, aid, c.body, ts(c.created_at)])?;
+            // generated column order: (id, subject_type, repo_id, subject_number, …)
+            cm_app.append_row(params![cid, "pr", repo_id, pr.number, aid, c.body, ts(c.created_at)])?;
             stats.comments += 1;
         }
 

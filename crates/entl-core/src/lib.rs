@@ -11,10 +11,10 @@ pub mod gitops;
 pub mod extract;
 pub mod gitwrite;
 pub mod ingest;
-pub mod migrations;
 pub mod objects;
 pub mod pull;
 pub mod rebuild;
+pub mod schema_gen;
 pub mod sink;
 pub mod stream;
 
