@@ -51,6 +51,14 @@ class Entl {
    */
   changes(repoPath: string, options?: ChangesOptions | undefined | null): Changes
   /**
+   * Backfill this handle's DuckDB store into a **driver** target — a database entl-core doesn't
+   * link (PGlite, or any client you hold). Returns a `DriverPlan`; call `.next()` for each
+   * `{sql, params}` statement and run it against your client until it yields `null`. The DDL,
+   * type mapping and upserts are all generated in Rust (`DriverSink`) — the JS side only
+   * executes. A background thread reads the store and feeds the plan (backpressured).
+   */
+  driverPlan(options?: DriverPlanOptions | undefined | null): DriverPlan
+  /**
    * Reconstruct a git repo from a store into `options.out` → `Promise<number>` (commits
    * rebuilt). Needs the store to have been sunk with `objects: true`. Off the JS thread.
    */
@@ -249,6 +257,23 @@ interface SyncStats {
 }
 ```
 
+### `DriverPlanOptions`
+
+Options for `Entl.driverPlan()`.
+
+```ts
+interface DriverPlanOptions {
+  /** Only mirror these tables (default: all Postgres-eligible tables). */
+  tables?: Array<string>
+  /** Skip these tables. */
+  exclude?: Array<string>
+  /** Rename tables at the target. */
+  rename?: Array<TableRename>
+  /** Target schema (default "entl"). */
+  schema?: string
+}
+```
+
 ### `ChangesOptions`
 
 Options for `Entl.changes()`.
@@ -269,6 +294,17 @@ A live change stream from one pull — the design's "stream plane". `next()` res
 ```ts
 class Changes {
   /** The next change batch as JSON (`{table, op, rows}`), or `null` when the stream ends. */
+  next(): Promise<string | null>
+}
+```
+
+### `DriverPlan`
+
+A driver-sink statement plan — the "mirror into a database entl-core doesn't link" surface (notes/design/multidb.md). All the DDL / type-mapping / upsert logic lives in Rust core (`DriverSink`); this streams the resulting `{sql, params}` statements so the JS side only executes them against its own client (e.g. PGlite: `await pg.query(sql, params)`). `next()` resolves to the next statement or `null` when the plan is complete.
+
+```ts
+class DriverPlan {
+  /** The next statement as JSON (`{sql, params}`), or `null` when the plan is complete. */
   next(): Promise<string | null>
 }
 ```

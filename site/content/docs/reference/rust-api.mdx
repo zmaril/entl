@@ -61,6 +61,83 @@ struct FileDiff {
 }
 ```
 
+### `Dialect`
+
+The SQL dialect a [`DriverSink`] emits. Only Postgres today (covers PGlite); the enum is the
+seam for MySQL/others without touching the sink.
+
+```rust
+enum Dialect {
+    /// Postgres: `$n` placeholders, `ON CONFLICT … DO UPDATE … EXCLUDED`, `text`/`timestamptz`.
+    Postgres,
+}
+```
+
+### `DriverSink`
+
+A sink that emits [`Statement`]s to a callback instead of executing them itself.
+
+`emit` is any `FnMut(Statement) -> Result<()>`; a binding usually sends into a
+[`statement_channel`]. Schema/DDL/type mapping mirror [`PostgresSink`](crate::sink::PostgresSink)
+— the two are the same logic, one executing locally, one delegating.
+
+```rust
+struct DriverSink<E: FnMut(Statement) -> Result<()>> {
+    emit: E,
+    dialect: Dialect,
+    select: SinkSelect,
+    schema: Option<String>,
+    /// Have we emitted `CREATE SCHEMA` yet?
+    schema_made: bool,
+    /// Targets we've already emitted `CREATE TABLE` for, → their PK columns (empty = no PK).
+    ensured: HashMap<String, Vec<String>>,
+    /// Cached upsert SQL per target.
+    insert_sql: HashMap<String, String>,
+    /// Targets already cleared once this run (for `Replace`).
+    cleared: HashSet<String>,
+}
+```
+
+### `Statement`
+
+One executable statement: SQL with positional placeholders + the parameters to bind. DDL
+(`CREATE`/`DELETE`) carries no params. The host runs it verbatim — e.g. `pg.query(sql, params)`.
+`table` names the canonical (source) table it acts on — `None` for cross-table DDL like
+`CREATE SCHEMA` — so a host can route or tally per table without parsing the SQL.
+
+```rust
+struct Statement {
+    pub sql: String,
+    pub params: Vec<Value>,
+    pub table: Option<String>,
+}
+```
+
+### `StatementStream`
+
+The consumer side of a driver sink's statement plan: drain it with a blocking, bounded
+`poll(timeout)` — the same primitive as the change stream, so a binding wraps it the same way.
+
+```rust
+struct StatementStream {
+    rx: Receiver<Statement>,
+}
+```
+
+### `StmtPoll`
+
+The result of a [`StatementStream`] poll — mirrors [`Poll`](crate::stream::Poll).
+
+```rust
+enum StmtPoll {
+    Statement(Statement),
+    /// Timed out; the producer is still running.
+    Idle,
+    /// The producer dropped its sender and the buffer is drained — the plan is complete.
+    Closed,
+}
+```
+
 ### `GithubIngest`
 
 ```rust
@@ -346,6 +423,38 @@ context expansion (old/new side).
 
 ```rust
 fn file_at(repo_path: &str, commit_hex: &str, path: &str) -> Result<Option<String>>
+```
+
+### `backfill`
+
+Replay an existing DuckDB store into `sink` — "a sink added months later backfills itself up"
+(notes/design/multidb.md). Each present table is read via Arrow and applied as one `Replace`
+batch, so the sink recreates it from scratch. This is the *pull* counterpart to the streaming
+[`pull_into`](crate::pull::pull_into): it drives any sink — including a [`DriverSink`] — off a
+store that's already populated, no repo or network needed.
+
+```rust
+fn backfill(conn: &duckdb::Connection, sink: &mut dyn Sink, tables: &[&str]) -> Result<u64>
+```
+
+### `driver_tables`
+
+The tables a driver sink can mirror — the default backfill set: every physical table the
+catalog describes (entity + association/edge tables). Catalog-driven, so a table added to
+`entl.tsp` joins the mirror on regeneration.
+
+```rust
+fn driver_tables() -> Vec<&'static str>
+```
+
+### `statement_channel`
+
+A bounded channel for a driver sink's statements: `(sender, stream)`. The `sender` becomes the
+sink's `emit` (`move |s| sender.send(s)`); the caller drains `stream`. Bounded = backpressure,
+so the producer paces to the host's execution.
+
+```rust
+fn statement_channel(capacity: usize) -> (Sender<Statement>, StatementStream)
 ```
 
 ### `branch_exists`

@@ -105,6 +105,13 @@ Context: notes/design/testing.md + multidb.md.
 [ ] Full row-level NDJSON in `watch --stream` (needs a version-matched arrow-json); today
     it emits {table, op, rows} summaries only.
 
+# ci / codegen
+[ ] CI codegen-freshness gate: CI regenerates every generated artifact (fluessig: entl.tsp ->
+    catalog.json/api.json -> schema_gen.rs; python models; node tables.gen.ts; docs reference)
+    and fails if `git status --porcelain` is dirty — stale codegen becomes a build failure.
+    Put the regen chain + the single command in the README so contributors and CI run the same
+    thing. (See crates/fluessig/plan.txt, Testing.)
+
 # cli / docs
 [x] `entl extract` CLI command (extract_json exists in core + bindings, not the CLI).
 [ ] Regenerate the docs site reference: new tables (blobs.content), new commands (sink,
