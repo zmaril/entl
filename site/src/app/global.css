@@ -2,7 +2,10 @@
 @import 'fumadocs-ui/css/neutral.css';
 @import 'fumadocs-ui/css/preset.css';
 
-/* Entl theme — a duckling in a Tyrolean hat: hunter-green primary + duckling-yellow accent. */
+/* Entl theme — a duckling in a Tyrolean hat: hunter-green primary + duckling-yellow accent.
+   This file is THE design-token home: colors and motion are defined here and only here.
+   straitjacket-allow-file:color
+   straitjacket-allow-file:motion */
 :root {
   --color-fd-primary: hsl(137 42% 30%);
   --color-fd-ring: hsl(137 42% 30%);

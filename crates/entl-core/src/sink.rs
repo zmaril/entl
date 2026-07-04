@@ -1,5 +1,9 @@
 //! Sinks — consumers of the change stream that write it into a target.
 //!
+//! straitjacket-allow-file:duplication — the SQLite and Postgres sinks are
+//! deliberately parallel twins (same lifecycle, per-dialect details); the
+//! genuinely shared pieces live in `cell_json`/`batch_to_json`/`upsert_sql`.
+//!
 //! See notes/design/multidb.md. A sink is "just a subscriber": it `poll`s the
 //! [`ChangeStream`](crate::stream::ChangeStream) and applies each
 //! [`ChangeBatch`](crate::stream::ChangeBatch) to its target. Every sink adapter
@@ -220,25 +224,43 @@ fn instantiate(tables: &[TableSchema], name: &str, target: &str) -> Option<Strin
     tables.iter().find(|t| t.name == name).map(|t| t.ddl.replace("__table__", target))
 }
 
-/// Build the INSERT/UPSERT for a table given its columns + PK columns.
-fn insert_sql(table: &str, cols: &[String], pk: &[String]) -> String {
+/// Placeholder style for [`upsert_sql`].
+pub(crate) enum Ph {
+    /// `?` — SQLite / DuckDB.
+    Question,
+    /// `$1..$n` — Postgres.
+    Dollar,
+}
+
+/// THE upsert builder — one implementation for every SQL consumer (both sinks
+/// and the driver sink). `table_sql` arrives already quoted/qualified.
+/// `excluded` is lowercase: valid in SQLite and Postgres alike.
+pub(crate) fn upsert_sql(table_sql: &str, cols: &[String], pk: &[String], ph: Ph) -> String {
     let quoted = cols.iter().map(|c| format!("\"{c}\"")).collect::<Vec<_>>().join(", ");
-    let ph = std::iter::repeat("?").take(cols.len()).collect::<Vec<_>>().join(", ");
+    let placeholders = match ph {
+        Ph::Question => std::iter::repeat("?").take(cols.len()).collect::<Vec<_>>().join(", "),
+        Ph::Dollar => (1..=cols.len()).map(|i| format!("${i}")).collect::<Vec<_>>().join(", "),
+    };
     if pk.is_empty() {
-        return format!("INSERT INTO \"{table}\" ({quoted}) VALUES ({ph})");
+        return format!("INSERT INTO {table_sql} ({quoted}) VALUES ({placeholders})");
     }
     let conflict = pk.iter().map(|c| format!("\"{c}\"")).collect::<Vec<_>>().join(", ");
     let non_pk: Vec<&String> = cols.iter().filter(|c| !pk.contains(c)).collect();
     if non_pk.is_empty() {
-        format!("INSERT INTO \"{table}\" ({quoted}) VALUES ({ph}) ON CONFLICT ({conflict}) DO NOTHING")
+        format!("INSERT INTO {table_sql} ({quoted}) VALUES ({placeholders}) ON CONFLICT ({conflict}) DO NOTHING")
     } else {
         let set = non_pk
             .iter()
             .map(|c| format!("\"{c}\" = excluded.\"{c}\""))
             .collect::<Vec<_>>()
             .join(", ");
-        format!("INSERT INTO \"{table}\" ({quoted}) VALUES ({ph}) ON CONFLICT ({conflict}) DO UPDATE SET {set}")
+        format!("INSERT INTO {table_sql} ({quoted}) VALUES ({placeholders}) ON CONFLICT ({conflict}) DO UPDATE SET {set}")
     }
+}
+
+/// Build the INSERT/UPSERT for a table given its columns + PK columns.
+fn insert_sql(table: &str, cols: &[String], pk: &[String]) -> String {
+    upsert_sql(&format!("\"{table}\""), cols, pk, Ph::Question)
 }
 
 /// Write the change stream into a **SQLite** file, upserting by primary key.
@@ -356,25 +378,9 @@ fn pg_type(dt: &DataType) -> &'static str {
     }
 }
 
-/// Build the INSERT/UPSERT for Postgres (`$n` placeholders, `EXCLUDED` for updates).
+/// Build the INSERT/UPSERT for Postgres (`$n` placeholders).
 fn pg_insert_sql(table: &str, cols: &[String], pk: &[String]) -> String {
-    let quoted = cols.iter().map(|c| format!("\"{c}\"")).collect::<Vec<_>>().join(", ");
-    let ph = (1..=cols.len()).map(|i| format!("${i}")).collect::<Vec<_>>().join(", ");
-    if pk.is_empty() {
-        return format!("INSERT INTO \"{table}\" ({quoted}) VALUES ({ph})");
-    }
-    let conflict = pk.iter().map(|c| format!("\"{c}\"")).collect::<Vec<_>>().join(", ");
-    let non_pk: Vec<&String> = cols.iter().filter(|c| !pk.contains(c)).collect();
-    if non_pk.is_empty() {
-        format!("INSERT INTO \"{table}\" ({quoted}) VALUES ({ph}) ON CONFLICT ({conflict}) DO NOTHING")
-    } else {
-        let set = non_pk
-            .iter()
-            .map(|c| format!("\"{c}\" = EXCLUDED.\"{c}\""))
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!("INSERT INTO \"{table}\" ({quoted}) VALUES ({ph}) ON CONFLICT ({conflict}) DO UPDATE SET {set}")
-    }
+    upsert_sql(&format!("\"{table}\""), cols, pk, Ph::Dollar)
 }
 
 /// One JSON cell → a boxed Postgres parameter of the column's inferred type. NULL and value use
