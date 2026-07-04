@@ -1,0 +1,13 @@
+name: straitjacket
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  straitjacket:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: curl -fsSL https://raw.githubusercontent.com/zmaril/straitjacket/main/install.sh | sh
+      - run: straitjacket
