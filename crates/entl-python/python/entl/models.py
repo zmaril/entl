@@ -1,38 +1,22 @@
-# AUTO-GENERATED from crates/entl-core/migrations/duckdb/tables/*.sql by gen_models.py.
-# The SQLAlchemy read-plane projection of the entl schema. Do not edit by hand.
-#
-# READ-ONLY: these models never manage schema. entl's sink owns every table (one
-# mechanism: per-table DDL templates, drop-and-rebuild — see AGENTS.md), so calling
-# create_all()/drop_all() here is a mistake — the column types below are a lossy read
-# projection (oids/timestamps are text, bigint->Integer) and would author a schema that
-# DISAGREES with the sink. The guard below turns that mistake into a clear error.
-#
-# Bind to any store the data was sunk into, e.g.:
-#   from sqlalchemy import create_engine, select
-#   from sqlalchemy.orm import Session
-#   from entl.models import Commits
-#   e = create_engine('sqlite:///data.sqlite')
-#   with Session(e) as s: rows = s.scalars(select(Commits)).all()
+# AUTO-GENERATED from the fluessig catalog (crates/fluessig/entl.tsp). Do not edit by hand.
+# Regenerate: the fluessig-gen command in crates/fluessig/plan.txt (or `bun run gen` in crates/entl-node).
 
 from sqlalchemy import Boolean, Column, Integer, String, event
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
 
-
 def _read_only(action):
-    """entl owns the schema via its sink; the ORM is a pure read projection."""
+    "entl owns the schema via its sink; the ORM is a pure read projection."
     def _guard(*_args, **_kw):
         raise RuntimeError(
-            f"entl.models are read-only: the entl sink owns the schema, so {action} is "
-            "disallowed here. Create tables by sinking data with entl (see AGENTS.md), "
-            "not through SQLAlchemy."
+            "entl.models are read-only: the entl sink owns the schema, so " + action + " is "
+            "disallowed here. Create tables by sinking data with entl, not through SQLAlchemy."
         )
     return _guard
 
-
-# Abort any attempt to emit DDL from these models (create_all / drop_all) before it runs,
-# so the models can never author a schema that drifts from what the sink writes.
+# Abort any attempt to emit DDL from these models (create_all / drop_all) before it
+# runs, so the models can never author a schema that drifts from what the sink writes.
 event.listen(Base.metadata, "before_create", _read_only("create_all()"))
 event.listen(Base.metadata, "before_drop", _read_only("drop_all()"))
 
@@ -81,8 +65,8 @@ class Blobs(Base):
 class CommitParents(Base):
     __tablename__ = "commit_parents"
     commit_oid = Column(String, primary_key=True)
-    parent_oid = Column(String, nullable=False)
     idx = Column(Integer, primary_key=True)
+    parent_oid = Column(String, nullable=False)
 
 class Commits(Base):
     __tablename__ = "commits"
@@ -142,8 +126,8 @@ class GhCheckRuns(Base):
 class GhComments(Base):
     __tablename__ = "gh_comments"
     id = Column(Integer, primary_key=True)
-    repo_id = Column(String, nullable=False)
     subject_type = Column(String, nullable=False)
+    repo_id = Column(String, nullable=False)
     subject_number = Column(Integer, nullable=False)
     author_id = Column(Integer)
     body = Column(String)
