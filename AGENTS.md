@@ -49,22 +49,22 @@ bun test                         # coverage test: the sink must cover every entl
 
 # the Python addon (PyO3 → maturin). Excluded from the default cargo set, like entl-node.
 cd crates/entl-python
-uv venv && uv pip install maturin pytest
+uv venv && uv pip install --group dev   # ALL build/test deps — declared once in pyproject's
+                                        # [dependency-groups] (maturin/pytest/sqlalchemy/pyarrow;
+                                        # entl itself ships no pyarrow — ChangeBatch speaks the
+                                        # PyCapsule interface, consumers bring their own Arrow)
 # Use the venv's own maturin/python (NOT `uv run maturin` — its editable install can load a
 # stale .so after a rebuild).
 .venv/bin/maturin develop
-uv pip install sqlalchemy pyarrow   # the `orm` + `arrow` extras: entl.models, and the Arrow
-                                    # tests / docs-harness recipes (entl itself ships no pyarrow —
-                                    # ChangeBatch speaks the PyCapsule interface, consumers bring Arrow)
 # entl.models is GENERATED from the fluessig catalog — regenerate via `bun run gen`
 # in crates/entl-node (one command regenerates every ORM artifact + the Rust schema).
-.venv/bin/python -m pytest tests/   # sink/extract/rebuild/matrix + the SQLAlchemy models
+.venv/bin/python -m pytest tests/   # sink/extract/rebuild/matrix/arrow + the SQLAlchemy models
 
 # the Ruby addon (Magnus, rb_sys). Needs a Ruby 3.x/4.x + LIBCLANG_PATH → arm64 libclang.
 cd crates/entl-ruby
-gem install rb_sys minitest
-LIBCLANG_PATH=/Library/Developer/CommandLineTools/usr/lib ruby extconf.rb && make
-ruby -I. -Itest test/test_entl.rb   # Entl.new / sink / query / extract
+bundle install                      # deps declared once in the Gemfile (rb_sys, minitest)
+LIBCLANG_PATH=/Library/Developer/CommandLineTools/usr/lib bundle exec ruby extconf.rb && make
+bundle exec ruby -I. -Itest test/test_entl.rb   # Entl.new / sink / query / extract / arrow ipc
 
 # the CLI: pull a repo and sync into a target DB (sqlite / jsonl / postgres)
 ./target/release/entl sink ./some-repo --to sqlite   --dest out.db

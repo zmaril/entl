@@ -68,7 +68,9 @@ jobs:
         working-directory: crates/entl-python
         run: |
           python -m venv .venv
-          .venv/bin/pip install --quiet maturin pytest sqlalchemy pyarrow
+          # deps live once in pyproject's [dependency-groups] (needs pip >= 25.1)
+          .venv/bin/pip install --quiet --upgrade pip
+          .venv/bin/pip install --quiet --group dev
           .venv/bin/maturin develop --quiet
           .venv/bin/python -m pytest tests/ -q
 
@@ -78,18 +80,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust-setup
+      # deps live once in crates/entl-ruby/Gemfile (bundler-cache runs bundle install)
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
+          working-directory: crates/entl-ruby
+          bundler-cache: true
       # rb_sys drives cargo through extconf/make; bindgen finds the runner's
       # libclang on its own (no LIBCLANG_PATH needed on ubuntu images).
       - name: build + test
         working-directory: crates/entl-ruby
         run: |
-          gem install rb_sys minitest
-          ruby extconf.rb
+          bundle exec ruby extconf.rb
           make
-          ruby -I. -Itest test/test_entl.rb
+          bundle exec ruby -I. -Itest test/test_entl.rb
 
   postgres:
     name: postgres sink (testkit round-trips)
@@ -139,7 +143,8 @@ jobs:
         working-directory: crates/entl-python
         run: |
           python -m venv .venv
-          .venv/bin/pip install --quiet maturin sqlalchemy pyarrow
+          .venv/bin/pip install --quiet --upgrade pip
+          .venv/bin/pip install --quiet --group dev
           .venv/bin/maturin develop --quiet
       # examples.test.ts is dependency-free (bun:test + node builtins), so no
       # `bun install` in site/ — it would pull the whole docs toolchain for nothing.
