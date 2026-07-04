@@ -35,7 +35,7 @@ def test_query_sink_through_models():
     with Session(engine) as s:
         n = s.scalar(select(func.count()).select_from(models.Commits))
         first = s.scalars(select(models.Commits)).first()
-    assert n == stats["new_commits"] > 0
+    assert n == stats.new_commits > 0
     assert len(first.oid) == 40 and first.author_name == "Tester"
 
 

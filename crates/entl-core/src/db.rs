@@ -3,7 +3,12 @@
 use anyhow::Result;
 use duckdb::Connection;
 
-use crate::migrations::{instantiate, DUCKDB_EXTRAS, DUCKDB_TABLES};
+use crate::schema_gen::DUCKDB_TABLES;
+
+/// DuckDB-only helpers applied after the tables on every (re)build: DAG-walk macros + hex views.
+/// Hand-written (genuinely dialect-specific — the extras mechanism); everything tabular is
+/// generated (`schema_gen`).
+pub const DUCKDB_EXTRAS: &str = include_str!("../migrations/duckdb/extras.sql");
 
 /// An open entl database.
 pub struct Db {
@@ -55,9 +60,8 @@ impl Db {
         for t in existing {
             self.conn.execute_batch(&format!("DROP TABLE IF EXISTS \"{t}\" CASCADE;"))?;
         }
-        for (name, _) in DUCKDB_TABLES {
-            let ddl = instantiate(DUCKDB_TABLES, name, name).expect("template exists");
-            self.conn.execute_batch(&ddl)?;
+        for t in DUCKDB_TABLES {
+            self.conn.execute_batch(&t.ddl.replace("__table__", t.name))?;
         }
         self.conn.execute_batch(DUCKDB_EXTRAS)?;
         self.conn.execute("DELETE FROM _entl_schema", [])?;
@@ -86,9 +90,10 @@ impl Db {
     }
 }
 
-/// A stable content hash of the whole schema (all DuckDB templates + extras). FNV-1a, not std's
-/// `DefaultHasher` (which can drift across std versions and cause spurious rebuilds). Any edit to
-/// a template bumps it, triggering a drop-&-rebuild on next open — no manual version bumping.
+/// A stable content hash of the whole schema (the generated DuckDB tables + the extras). FNV-1a,
+/// not std's `DefaultHasher` (which can drift across std versions and cause spurious rebuilds).
+/// Regenerating `schema_gen.rs` with any change (i.e. editing `entl.tsp`) or editing `extras.sql`
+/// bumps it, triggering a drop-&-rebuild on next open — no manual version bumping.
 fn schema_hash() -> String {
     fn fnv(mut h: u64, s: &str) -> u64 {
         for b in s.as_bytes() {
@@ -98,8 +103,8 @@ fn schema_hash() -> String {
         h
     }
     let mut h = 0xcbf2_9ce4_8422_2325u64;
-    for (_, sql) in DUCKDB_TABLES {
-        h = fnv(h, sql);
+    for t in DUCKDB_TABLES {
+        h = fnv(h, t.ddl);
     }
     h = fnv(h, DUCKDB_EXTRAS);
     format!("{h:016x}")

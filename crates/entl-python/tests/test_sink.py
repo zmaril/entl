@@ -28,10 +28,10 @@ def _counts(db):
 def _run(out, repo=REPO):
     e = entl.Entl(":memory:")
     s1 = e.sink(repo, entl.SinkTarget.Sqlite, path=out, github=False)
-    assert s1["new_commits"] > 0, s1
-    assert s1["rows"] > 0, s1
+    assert s1.new_commits > 0, s1
+    assert s1.rows > 0, s1
     c1 = _counts(out)
-    assert c1["commits"] == s1["new_commits"], (c1, s1)
+    assert c1["commits"] == s1.new_commits, (c1, s1)
 
     # Re-run into the same file: PK upsert → counts must not double.
     entl.Entl(":memory:").sink(repo, entl.SinkTarget.Sqlite, path=out, github=False)

@@ -1,9 +1,9 @@
 ---
 title: Schema
-description: Every table Entl writes — generated from the migrations.
+description: Every table Entl writes — generated from the fluessig catalog.
 ---
 
-{/* AUTO-GENERATED from crates/entl-core/migrations/duckdb/tables/*.sql by scripts/gen-reference.ts — run `bun run gen`. Do not edit by hand. */}
+{/* AUTO-GENERATED from crates/fluessig/schema_docs.json (lowered from crates/fluessig/entl.tsp) by scripts/gen-reference.ts — run `bun run gen`. Do not edit by hand. */}
 
 # Schema
 
@@ -21,8 +21,8 @@ computed on demand (`diffCommits`, `fileAt`; see the [Node API](/docs/reference/
 
 | Column | Type | Description | |
 |---|---|---|---|
-| `oid` | `blob` |  | **PK** |
-| `repo_id` | `text` |  | not null |
+| `oid` | `blob` | object id — the content hash (binary; hex via `lower(hex(oid))`). Globally unique, so the family key is oid alone. | **PK** |
+| `repo_id` | `text` | the repo this object was seen in (an association, not a key member) | not null |
 | `size` | `bigint` |  | not null |
 | `is_binary` | `boolean` |  | not null, default `false` |
 | `content_text` | `text` |  |  |
@@ -31,20 +31,23 @@ computed on demand (`diffCommits`, `fileAt`; see the [Node API](/docs/reference/
 
 ### `commit_parents`
 
+this commit's parents, ordered by `idx` (merges have several)
+
 | Column | Type | |
 |---|---|---|
 | `commit_oid` | `blob` | **PK** |
-| `parent_oid` | `blob` | not null |
 | `idx` | `integer` | **PK** |
+| `parent_oid` | `blob` | not null |
 
 ### `commits`
 
-One row per commit, walked from every ref. Author and committer time/identity are kept separate; `summary` is the first line of `message`.
+One row per commit, walked from every ref. Author and committer time/identity
+are kept separate; `summary` is the first line of `message`.
 
 | Column | Type | Description | |
 |---|---|---|---|
-| `oid` | `blob` | commit SHA (binary; hex via `lower(hex(oid))`) | **PK** |
-| `repo_id` | `text` |  | not null |
+| `oid` | `blob` | object id — the content hash (binary; hex via `lower(hex(oid))`). Globally unique, so the family key is oid alone. | **PK** |
+| `repo_id` | `text` | the repo this object was seen in (an association, not a key member) | not null |
 | `tree_oid` | `blob` | root tree this commit points at | not null |
 | `message` | `text` | full commit message | not null |
 | `summary` | `text` | first line of the message | not null |
@@ -57,21 +60,32 @@ One row per commit, walked from every ref. Author and committer time/identity ar
 | `committer_when` | `timestamp` |  |  |
 | `committer_tz` | `text` |  |  |
 | `parent_count` | `integer` |  | not null, default `0` |
-| `is_merge` | `boolean` |  | not null, default `false` |
+| `is_merge` | `boolean` | The §9.3 v1 carve-out: a REAL derived field — true iff a second parent
+exists. Today it is ALSO a stored column (the source computes it; parity
+with the hand-written templates) and the codec additionally emits a
+`commits_derived` view computing it from `parents`. At the Step-5 swap the
+stored column drops and the view becomes the only projection. | not null, default `false` |
 | `gpg_signed` | `boolean` |  | not null, default `false` |
 
 ### `conflicts`
 
-Merge-conflict hot zones (the north star). Populated by the `entl conflicts` pass: replay every historical 2-parent merge with gix's 3-way tree merge and record the paths that conflicted. `unresolved` = git would have required a human to resolve it (text markers or structural failure), vs auto-resolved.
+Merge-conflict hot zones (the north star). Populated by the `entl conflicts`
+pass: replay every historical 2-parent merge with gix's 3-way tree merge and
+record the paths that conflicted. `unresolved` = git would have required a
+human, vs auto-resolved.
 
-| Column | Type | |
-|---|---|---|
-| `repo_id` | `text` | **PK** |
-| `merge_oid` | `text` | **PK** |
-| `path` | `text` | **PK** |
-| `unresolved` | `boolean` | not null |
+| Column | Type | Description | |
+|---|---|---|---|
+| `repo_id` | `text` |  | **PK** |
+| `merge_oid` | `text` | hex text today, while every other oid column is blob — schema inconsistency, FINDINGS #8 | **PK** |
+| `path` | `text` |  | **PK** |
+| `unresolved` | `boolean` |  | not null |
 
 ### `file_changes`
+
+Per-commit file changes — a WEAK ENTITY: identified by (owner, path), no
+global id of its own. Authored as an entity with FK-in-PK; whether it should
+*also* be a
 
 | Column | Type | |
 |---|---|---|
@@ -92,12 +106,17 @@ Branches, tags, remote-tracking refs, and HEAD — one row each.
 |---|---|---|---|
 | `repo_id` | `text` |  | **PK** |
 | `name` | `text` | short ref name, e.g. `main` or `origin/main` | **PK** |
-| `kind` | `text` | branch \| tag \| remote \| head | not null |
-| `target_oid` | `blob` | commit the ref points at | not null |
+| `kind` | `text` |  | not null |
+| `target_oid` | `blob` | Today: implicitly commit-typed (no discriminator column). The honest model
+is `target: GitObject` — an annotated-tag ref targets a tag object, not a
+commit — but that adds a target_type column, i.e. a real schema change.
+Authored as Commit for byte parity; the upgrade is FINDINGS #7. | not null |
 | `is_symbolic` | `boolean` |  | not null, default `false` |
 | `upstream` | `text` |  |  |
 
 ### `repos`
+
+A repository entl has synced.
 
 | Column | Type | |
 |---|---|---|
@@ -113,6 +132,8 @@ Branches, tags, remote-tracking refs, and HEAD — one row each.
 
 ### `sync_state`
 
+Per-resource sync bookkeeping (etags, cursors, watermarks).
+
 | Column | Type | |
 |---|---|---|
 | `resource` | `text` | **PK** |
@@ -123,6 +144,10 @@ Branches, tags, remote-tracking refs, and HEAD — one row each.
 | `last_error` | `text` |  |
 
 ### `tree_entries`
+
+The polymorphic edge already in production: tree_entries stores the
+(type, key) pair as (entry_type, child_oid) — exactly DESIGN §2's
+projection of a polymorphic association.
 
 | Column | Type | |
 |---|---|---|
@@ -135,10 +160,10 @@ Branches, tags, remote-tracking refs, and HEAD — one row each.
 
 ### `trees`
 
-| Column | Type | |
-|---|---|---|
-| `oid` | `blob` | **PK** |
-| `repo_id` | `text` | not null |
+| Column | Type | Description | |
+|---|---|---|---|
+| `oid` | `blob` | object id — the content hash (binary; hex via `lower(hex(oid))`). Globally unique, so the family key is oid alone. | **PK** |
+| `repo_id` | `text` | the repo this object was seen in (an association, not a key member) | not null |
 
 
 ## GitHub
@@ -167,15 +192,17 @@ Branches, tags, remote-tracking refs, and HEAD — one row each.
 
 ### `gh_comments`
 
-| Column | Type | |
-|---|---|---|
-| `id` | `bigint` | **PK** |
-| `repo_id` | `text` | not null |
-| `subject_type` | `text` | not null |
-| `subject_number` | `integer` | not null |
-| `author_id` | `bigint` |  |
-| `body` | `text` |  |
-| `created_at` | `timestamp` |  |
+Issue/PR comments — subject is a polymorphic reference into the GhSubject family.
+
+| Column | Type | Description | |
+|---|---|---|---|
+| `id` | `bigint` |  | **PK** |
+| `subject_type` | `text` |  | not null |
+| `repo_id` | `text` | the (type, key) pair: (subject_type, repo_id + subject_number) | not null |
+| `subject_number` | `integer` | the (type, key) pair: (subject_type, repo_id + subject_number) | not null |
+| `author_id` | `bigint` |  |  |
+| `body` | `text` |  |  |
+| `created_at` | `timestamp` |  |  |
 
 ### `gh_commit_statuses`
 
@@ -192,17 +219,19 @@ Branches, tags, remote-tracking refs, and HEAD — one row each.
 
 ### `gh_events`
 
-Raw GitHub event stream (the /repos/\{o\}/\{r\}/events feed). Entl polls this as the top-level "did anything happen?" signal AND stores every event as a queryable activity log. Note: GitHub's feed is capped (~300 events / 90 days), so this is complete *going forward* from when polling starts, not a full historical backfill. `payload` is the event's type-specific JSON, stored as text (query via json_extract(payload, '$.…') / payload::JSON).
+Raw GitHub event stream (the /events feed) — entl's "did anything happen?"
+signal AND a queryable activity log. The feed is capped (~300 events / 90
+days): complete going FORWARD from when polling starts.
 
-| Column | Type | |
-|---|---|---|
-| `repo_id` | `text` | **PK** |
-| `id` | `text` | **PK** |
-| `type` | `text` |  |
-| `actor_id` | `bigint` |  |
-| `actor_login` | `text` |  |
-| `created_at` | `timestamp` |  |
-| `payload` | `text` |  |
+| Column | Type | Description | |
+|---|---|---|---|
+| `repo_id` | `text` |  | **PK** |
+| `id` | `text` |  | **PK** |
+| `type` | `text` |  |  |
+| `actor_id` | `bigint` | denormalized pair: the association + a plain login column (FINDINGS #9) |  |
+| `actor_login` | `text` |  |  |
+| `created_at` | `timestamp` |  |  |
+| `payload` | `text` | the event's type-specific JSON |  |
 
 ### `gh_issues`
 
@@ -251,6 +280,8 @@ Raw GitHub event stream (the /repos/\{o\}/\{r\}/events feed). Entl polls this as
 
 ### `gh_pr_commits`
 
+plain join table (PK = all columns): the PR's commits
+
 | Column | Type | |
 |---|---|---|
 | `repo_id` | `text` | **PK** |
@@ -259,27 +290,30 @@ Raw GitHub event stream (the /repos/\{o\}/\{r\}/events feed). Entl polls this as
 
 ### `gh_pr_reviews`
 
-| Column | Type | |
-|---|---|---|
-| `id` | `bigint` | **PK** |
-| `repo_id` | `text` | not null |
-| `pr_number` | `integer` | not null |
-| `reviewer_id` | `bigint` |  |
-| `state` | `text` |  |
-| `submitted_at` | `timestamp` |  |
-| `body` | `text` |  |
+PR reviews — globally id-keyed, referencing the PR by its composite key.
+
+| Column | Type | Description | |
+|---|---|---|---|
+| `id` | `bigint` |  | **PK** |
+| `repo_id` | `text` | multi-column FK to a composite-keyed entity (repo_id, pr_number) | not null |
+| `pr_number` | `integer` | multi-column FK to a composite-keyed entity (repo_id, pr_number) | not null |
+| `reviewer_id` | `bigint` |  |  |
+| `state` | `text` |  |  |
+| `submitted_at` | `timestamp` |  |  |
+| `body` | `text` |  |  |
 
 ### `gh_pull_requests`
 
-Pull requests and their lifecycle. `mergeable` + `checks` are the live conflict and CI signals; `head_oid`/`base_oid` drive on-demand `base...head` PR diffs.
+Pull requests and their lifecycle. `mergeable` + `checks` are the live
+conflict and CI signals; head/base oids drive on-demand base...head diffs.
 
 | Column | Type | Description | |
 |---|---|---|---|
 | `repo_id` | `text` |  | **PK** |
-| `number` | `integer` | PR number (unique per repo) | **PK** |
+| `number` | `integer` |  | **PK** |
 | `title` | `text` |  |  |
 | `body` | `text` |  |  |
-| `state` | `text` | OPEN \| CLOSED \| MERGED | not null |
+| `state` | `text` |  | not null |
 | `author_id` | `bigint` |  |  |
 | `created_at` | `timestamp` |  |  |
 | `updated_at` | `timestamp` |  |  |
@@ -292,12 +326,14 @@ Pull requests and their lifecycle. `mergeable` + `checks` are the live conflict 
 | `deletions` | `integer` |  |  |
 | `changed_files` | `integer` |  |  |
 | `is_draft` | `boolean` |  | not null, default `false` |
-| `mergeable` | `text` | MERGEABLE \| CONFLICTING \| UNKNOWN (GitHub computes it lazily) |  |
-| `checks` | `text` | head commit CI rollup: SUCCESS \| FAILURE \| PENDING \| … |  |
+| `mergeable` | `text` |  |  |
+| `checks` | `text` | head commit CI rollup: SUCCESS \| FAILURE \| PENDING \| … (open set — stays text) |  |
 | `head_oid` | `blob` | PR head commit (for base...head diffs) |  |
 | `base_oid` | `blob` | base branch tip at fetch time |  |
 
 ### `gh_requested_reviewers`
+
+plain join table: requested reviewers
 
 | Column | Type | |
 |---|---|---|
@@ -307,21 +343,23 @@ Pull requests and their lifecycle. `mergeable` + `checks` are the live conflict 
 
 ### `gh_review_comments`
 
-| Column | Type | |
-|---|---|---|
-| `id` | `bigint` | **PK** |
-| `repo_id` | `text` | not null |
-| `pr_number` | `integer` | not null |
-| `path` | `text` |  |
-| `line` | `integer` |  |
-| `side` | `text` |  |
-| `commit_oid` | `blob` |  |
-| `author_id` | `bigint` |  |
-| `body` | `text` |  |
-| `created_at` | `timestamp` |  |
-| `in_reply_to` | `bigint` |  |
+| Column | Type | Description | |
+|---|---|---|---|
+| `id` | `bigint` |  | **PK** |
+| `repo_id` | `text` |  | not null |
+| `pr_number` | `integer` |  | not null |
+| `path` | `text` |  |  |
+| `line` | `integer` |  |  |
+| `side` | `text` |  |  |
+| `commit_oid` | `blob` |  |  |
+| `author_id` | `bigint` |  |  |
+| `body` | `text` |  |  |
+| `created_at` | `timestamp` |  |  |
+| `in_reply_to` | `bigint` | threaded replies — a nullable self-association |  |
 
 ### `gh_steps`
+
+Weak entity again: a step is (job, number), no global id.
 
 | Column | Type | |
 |---|---|---|

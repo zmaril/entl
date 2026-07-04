@@ -9,9 +9,15 @@
     {
       "name": "ReviewState",
       "variants": [
-        "approved",
-        "changesRequested",
-        "commented"
+        {
+          "name": "approved"
+        },
+        {
+          "name": "changesRequested"
+        },
+        {
+          "name": "commented"
+        }
       ]
     }
   ],
@@ -30,7 +36,8 @@
             "base": "string"
           },
           "nullable": false,
-          "doc": "the commit hash"
+          "doc": "the commit hash",
+          "key": true
         },
         {
           "name": "message",
@@ -73,7 +80,10 @@
             "to": "Commit",
             "cardinality": "many",
             "kind": "association",
-            "properties": "CommitParent"
+            "properties": "CommitParent",
+            "fkColumns": null,
+            "typeColumn": null,
+            "sourceColumns": null
           }
         }
       ]
@@ -91,7 +101,8 @@
             "name": "int64",
             "base": "numeric"
           },
-          "nullable": false
+          "nullable": false,
+          "key": true
         },
         {
           "name": "login",
@@ -116,7 +127,8 @@
             "name": "int64",
             "base": "numeric"
           },
-          "nullable": false
+          "nullable": false,
+          "key": true
         },
         {
           "name": "title",
@@ -146,7 +158,10 @@
             "to": "GhUser",
             "cardinality": "one",
             "kind": "association",
-            "properties": null
+            "properties": null,
+            "fkColumns": null,
+            "typeColumn": null,
+            "sourceColumns": null
           }
         },
         {
@@ -165,7 +180,10 @@
             "to": "GhPrReview",
             "cardinality": "many",
             "kind": "composition",
-            "properties": null
+            "properties": null,
+            "fkColumns": null,
+            "typeColumn": null,
+            "sourceColumns": null
           }
         }
       ]
@@ -183,7 +201,8 @@
             "name": "int64",
             "base": "numeric"
           },
-          "nullable": false
+          "nullable": false,
+          "key": true
         },
         {
           "name": "state",

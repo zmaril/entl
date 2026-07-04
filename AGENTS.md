@@ -26,6 +26,9 @@ crates/entl-python   PyO3 bindings (built via maturin, mixed layout): the engine
                      CPython (`entl._entl`) + `entl.models` (generated SQLAlchemy read-plane —
                      read-only; create_all/drop_all are guarded, the sink owns the schema).
 crates/entl-ruby     Magnus bindings: the engine in-process in Ruby (rb_sys/rake-compiler build).
+crates/fluessig      the schema tool (design: crates/fluessig/DESIGN.md). entl's catalog lives in
+                     crates/fluessig/entl.tsp (TypeSpec); fluessig lowers it to catalog.json and
+                     GENERATES entl's schema surface (see the schema convention below).
 site/                the docs site (Fumadocs — Next.js + MDX, static export). See notes/design/docs.md.
 notes/               design docs.
 ```
@@ -39,7 +42,9 @@ cargo test                       # Rust tests (e.g. crates/entl-core/src/github/
 
 # the napi addon → .node + index.js + index.d.ts
 cd crates/entl-node && bun run build
-bun run gen                      # regenerate the PGlite-sink table types (tables.gen.ts)
+bun run gen                      # regenerate ALL generated artifacts from the fluessig catalog:
+                                 # schema_gen.rs, schema_docs.json, entl.models (py),
+                                 # tables.gen.ts + schema.gen.ts (a stale one fails cargo test)
 bun test                         # coverage test: the sink must cover every entl table
 
 # the Python addon (PyO3 → maturin). Excluded from the default cargo set, like entl-node.
@@ -49,8 +54,9 @@ uv venv && uv pip install maturin pytest
 # stale .so after a rebuild). The forward-compat flag: the local interpreter (3.14) is newer
 # than pyo3's known-max; abi3 makes the wheel forward-compatible. Drop it once pyo3 catches up.
 PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 .venv/bin/maturin develop
-python gen_models.py                # regenerate entl.models (SQLAlchemy) from the schema
 uv pip install sqlalchemy           # the `orm` extra, for entl.models + its test
+# entl.models is GENERATED from the fluessig catalog — regenerate via `bun run gen`
+# in crates/entl-node (one command regenerates every ORM artifact + the Rust schema).
 .venv/bin/python -m pytest tests/   # sink/extract/rebuild/matrix + the SQLAlchemy models
 
 # the Ruby addon (Magnus, rb_sys). Needs a Ruby 3.x/4.x + LIBCLANG_PATH → arm64 libclang.
@@ -99,21 +105,23 @@ maturin develop`), and the CLI (`cargo build --release`). The docs generator rea
 
 - **Forge-namespacing.** GitHub tables are `gh_*`; git-generic tables (`commits`, `refs`,
   `file_changes`, …) are bare so a future forge reuses them. Keep new GitHub tables `gh_`.
-- **One schema mechanism: per-table templates, no data migration.** Every store — the DuckDB
-  engine store *and* the portable sinks — is built from name-templated per-table DDL in
-  `migrations/<dialect>/tables/<table>.sql` (`__table__` → the target name), listed in
-  `migrations.rs` (`DUCKDB_TABLES` / `SQLITE_TABLES` / `PG_TABLES`). The store is a **derived
-  cache**, so there are **no append-only migrations**: `db.rs` content-hashes the schema and, on
-  any change, **drops every table and rebuilds** — the caller just re-ingests. DuckDB applies all
-  its templates + `migrations/duckdb/extras.sql` (macros + hex views) on open; the sinks
-  instantiate a template lazily on first write (and `--rename` gets the real typed schema + PK).
-  **Add a table** = add its template under each dialect it belongs to + its name to the list(s) in
-  `migrations.rs`. Edit a template freely — the next open rebuilds. In dev you can also just delete
-  the `.duckdb`.
-- **Schema docs live in the templates.** A `--` comment block above `CREATE TABLE`
-  documents the table; a trailing `-- …` on a column documents the column. These are inert
-  SQL and flow into the generated schema reference. Same idea for Rust (`///`), the napi
-  bindings (JSDoc), and the CLI (clap `///` help) — the generator ports all of them.
+- **One schema mechanism: the fluessig catalog, generated into code.** The schema's single source
+  of truth is `crates/fluessig/entl.tsp` (all tables, keys, relations, docs). The chain:
+  `entl.tsp` → (`cd crates/fluessig/emitter && node emit.mjs ../entl.tsp`) → `catalog.json` →
+  (`cargo run -p fluessig --bin fluessig-gen -- crates/fluessig/catalog.json
+  crates/entl-core/src/schema_gen.rs --docs crates/fluessig/schema_docs.json`) → the COMMITTED
+  `schema_gen.rs` (per-dialect `__table__`-templated DDL + PKs, consumed by `db.rs` and the sinks
+  at zero runtime cost) + `schema_docs.json` (feeds the docs site's schema reference). The store is
+  a **derived cache**: `db.rs` content-hashes the generated schema + `migrations/duckdb/extras.sql`
+  (the one hand-written SQL left — macros + hex views) and on any change **drops every table and
+  rebuilds**; the caller re-ingests. **Add a table** = edit `entl.tsp`, run the regen chain, done —
+  a stale `schema_gen.rs` fails `cargo test` (the regenerates-identically test prints the command).
+  NB: DuckDB Appenders are positional — the generated column order is canonical; ingest appenders
+  follow it.
+- **Schema docs live in `entl.tsp`.** TypeSpec doc comments (`/** … */`) on models and fields
+  flow through `catalog.json` → `schema_docs.json` → the docs site's schema reference. Same idea
+  for Rust (`///`), the napi bindings (JSDoc), and the CLI (clap `///` help) — the generator ports
+  all of them.
 - **entl-core stays synchronous.** Async is a per-binding concern; the napi layer offloads
   to a threadpool and returns Promises. Don't make the core async.
 - **In-process means one DB.** The napi binding shares the DuckDB connection via

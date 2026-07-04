@@ -494,7 +494,16 @@ Step { statements: Vec<Statement> }      // Statement = {sql, params} | BsonDoc 
 ## 6. What v1 models vs. implements
 
 The **model** (§2) is the full entity graph — types are designed so Mongo-embed, neo4j-edge, and
-polymorphic targets slot in *without reshaping the IR later*. The first **implementation**
+polymorphic targets slot in *without reshaping the IR later*.
+
+**v1's mission (decided): bindgen + models, replacing entl's hand-written surface.** entl's schema
+templates, generated read planes (`tables.gen.ts` / `models.py`), and hand-written binding glue
+(the napi/PyO3/Magnus `lib.rs` files) get ripped out and regenerated from one `entl.tsp`. So v1 is
+**two verticals off one authored document**: the *models* vertical (catalog → SQL DDL + data codec
++ the entl-consumed ORM read planes) and the *bindgen* vertical (api layer → generated binding glue
+over one hand-implemented core trait — spike-proven, see `spike/` and `/translation.md`; each
+language's existing test suite is bindgen's parity gate, exactly as the DDL templates are for
+models). Mongo / graph / further ORM targets remain post-v1 fan-out. The first implementation
 exercises the SQL vertical:
 
 - v1 **models**: entities, scalar + nested fields, keys (incl. composite), relations (cardinality
@@ -804,6 +813,12 @@ Resolved:
 13. **Testing** → static/unit (loader + validator + per-codec golden outputs), proptest (random
     valid catalogs + Arrow batches → round-trip/invariants), and a cross-codec conformance corpus;
     entl (incl. annotated tags for polymorphism) is the top-level property test.
+14. **v1 scope = bindgen + models, replacing entl** → entl's schema templates, generated read
+    planes, and hand-written binding glue are the dogfood target and get removed in favor of
+    fluessig output. Bindgen is a v1 spine vertical (plan.txt Step 5b), not fan-out: a Rust
+    `fluessig bindgen` back-end consuming the op layer's `api.json`, with per-language idiom
+    templates keyed on op shape (`@ctor`/unary/`@stream`/`@manual`) — proven in `spike/`; each
+    binding's existing test suite is its parity gate.
 
 Still open:
 

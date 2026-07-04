@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // Generates reference docs from the engine's own sources of truth:
-//   - reference/schema.mdx    ← crates/entl-core/migrations/duckdb/tables/*.sql  (always; committed)
+//   - reference/schema.mdx    ← crates/fluessig/schema_docs.json  (always; committed)
 //   - reference/rust-api.mdx  ← crates/entl-core/src/*.rs          (always; committed)
 //   - reference/node-api.mdx ← crates/entl-node/index.d.ts        (when present)
 //   - reference/cli.mdx       ← `target/release/entl --help`       (when built)
@@ -15,7 +15,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..", "..");
-const MIGRATIONS = join(ROOT, "crates/entl-core/migrations/duckdb/tables");
+const SCHEMA_DOCS = join(ROOT, "crates/fluessig/schema_docs.json");
 const CORE_SRC = join(ROOT, "crates/entl-core/src");
 const DTS = join(ROOT, "crates/entl-node/index.d.ts");
 const BIN = join(ROOT, "target/release/entl");
@@ -33,62 +33,33 @@ const mdxSafe = (s: string) => s.replace(/[{}]/g, "\\$&");
 type Col = { name: string; type: string; notNull: boolean; pk: boolean; def?: string; desc?: string };
 type Table = { name: string; cols: Col[]; desc?: string };
 
-// Explanations live next to the schema, in source control: a `--` comment block
-// directly above a `CREATE TABLE` documents the table; a trailing `-- …` on a column
-// line documents that column. Both are ported into this page.
+// The schema reference as data: fluessig lowers the catalog (entl.tsp) into
+// crates/fluessig/schema_docs.json — per physical table, the columns with their
+// DuckDB types, flags, and the docs authored in entl.tsp. Regenerate with:
+//   cargo run -p fluessig --bin fluessig-gen -- \
+//     crates/fluessig/catalog.json crates/entl-core/src/schema_gen.rs \
+//     --docs crates/fluessig/schema_docs.json
 function parseTables(): Table[] {
-  const tables: Table[] = [];
-  for (const file of readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) {
-    // One file per table; the DDL uses the `__table__` placeholder, so the name is the filename.
-    const tableName = file.replace(/\.sql$/, "");
-    const lines = readFileSync(join(MIGRATIONS, file), "utf8").split("\n");
-    let comment: string[] = [];
-    for (let i = 0; i < lines.length; i++) {
-      const t = lines[i].trim();
-      if (t.startsWith("-->") || t === "") continue; // breakpoint marker / blank: keep buffer
-      if (t.startsWith("--")) {
-        comment.push(t.replace(/^--\s?/, ""));
-        continue;
-      }
-      const ct = t.match(/^CREATE TABLE (?:IF NOT EXISTS )?"?([a-z_]+)"?/i);
-      if (!ct) {
-        comment = []; // any other statement resets the buffer
-        continue;
-      }
-      const cols: Col[] = [];
-      const pk = new Set<string>();
-      let j = i + 1;
-      for (; j < lines.length; j++) {
-        const trimmed = lines[j].trim();
-        if (trimmed.startsWith(")")) break; // end of table
-        const cm = trimmed.match(/^(.*?)\s*--\s?(.*)$/); // split a trailing comment
-        const defPart = (cm ? cm[1] : trimmed).replace(/,$/, "").trim();
-        const colDesc = cm ? cm[2].trim() : "";
-        if (!defPart) continue;
-        const pkMatch = defPart.match(/PRIMARY KEY\s*\(([^)]*)\)/i);
-        if (/^CONSTRAINT/i.test(defPart) && pkMatch) {
-          for (const c of pkMatch[1].split(",")) pk.add(c.trim().replace(/"/g, ""));
-          continue;
-        }
-        const col = defPart.match(/^"?([a-z_]+)"?\s+([A-Za-z]+)(.*)$/);
-        if (!col) continue;
-        if (/PRIMARY KEY/i.test(col[3])) pk.add(col[1]);
-        cols.push({
-          name: col[1],
-          type: col[2].toLowerCase(),
-          notNull: /NOT NULL/i.test(col[3]),
-          pk: false,
-          def: col[3].match(/DEFAULT\s+(\S+)/i)?.[1],
-          desc: colDesc || undefined,
-        });
-      }
-      for (const c of cols) c.pk = pk.has(c.name);
-      tables.push({ name: tableName, cols, desc: comment.join(" ").trim() || undefined });
-      comment = [];
-      i = j;
-    }
-  }
-  return tables.sort((a, b) => a.name.localeCompare(b.name));
+  type Raw = {
+    name: string;
+    desc: string | null;
+    cols: { name: string; type: string; notNull: boolean; pk: boolean; def: string | null; desc: string | null }[];
+  };
+  const raw = JSON.parse(readFileSync(SCHEMA_DOCS, "utf8")) as Raw[];
+  return raw
+    .map((t) => ({
+      name: t.name,
+      desc: t.desc ?? undefined,
+      cols: t.cols.map((c) => ({
+        name: c.name,
+        type: c.type,
+        notNull: c.notNull,
+        pk: c.pk,
+        def: c.def ?? undefined,
+        desc: c.desc ?? undefined,
+      })),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function renderTable(t: Table): string {
@@ -112,7 +83,7 @@ function genSchema(): string {
   const tables = parseTables();
   const gh = tables.filter((t) => t.name.startsWith("gh_"));
   const git = tables.filter((t) => !t.name.startsWith("gh_"));
-  return `${fm("Schema", "Every table Entl writes — generated from the migrations.")}${banner("crates/entl-core/migrations/duckdb/tables/*.sql")}# Schema
+  return `${fm("Schema", "Every table Entl writes — generated from the fluessig catalog.")}${banner("crates/fluessig/schema_docs.json (lowered from crates/fluessig/entl.tsp)")}# Schema
 
 Entl writes one DuckDB. **git-generic** tables are bare (so a future forge reuses them);
 **GitHub** tables are namespaced \`gh_*\`. ${tables.length} tables in total.

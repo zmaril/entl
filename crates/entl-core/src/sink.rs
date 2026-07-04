@@ -210,10 +210,15 @@ fn to_sql_value(v: &Value) -> rusqlite::types::Value {
     }
 }
 
-// Per-table DDL templates live in crate::migrations (shared with the DuckDB store); a sink
-// instantiates one lazily on first write, so it creates only the tables it writes and `rename`
-// gets the real typed schema + PK at the new name. See notes/design/multidb.md.
-use crate::migrations::{instantiate, PG_TABLES, SQLITE_TABLES};
+// Per-table DDL comes from the GENERATED schema module (the fluessig catalog as committed
+// code); a sink instantiates a table lazily on first write, so it creates only the tables it
+// writes and `rename` gets the real typed schema + PK at the new name. See notes/design/multidb.md.
+use crate::schema_gen::{TableSchema, PG_TABLES, SQLITE_TABLES};
+
+/// A dialect table's DDL at the (possibly renamed) target name.
+fn instantiate(tables: &[TableSchema], name: &str, target: &str) -> Option<String> {
+    tables.iter().find(|t| t.name == name).map(|t| t.ddl.replace("__table__", target))
+}
 
 /// Build the INSERT/UPSERT for a table given its columns + PK columns.
 fn insert_sql(table: &str, cols: &[String], pk: &[String]) -> String {

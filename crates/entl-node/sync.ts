@@ -27,7 +27,7 @@ export interface SyncOptions {
   schema?: string;
 }
 
-type Stmt = { sql: string; params: unknown[]; table: string | null };
+
 
 /**
  * Mirror the chosen entl tables into `pg`. Default: all tables, schema `entl`.
@@ -51,12 +51,12 @@ export async function syncInto(
 
   const counts: Record<string, number> = {};
   for (;;) {
-    const next = await plan.next();
-    if (next === null) break;
-    const { sql, params, table } = JSON.parse(next) as Stmt;
-    await pg.query(sql, params);
+    const stmt = await plan.next();
+    if (stmt === null) break;
+    const params = JSON.parse(stmt.params) as unknown[]; // JSON until the Arrow C-FFI handoff
+    await pg.query(stmt.sql, params);
     // A row upsert (has bound params) tallies against its source table.
-    if (table && params.length > 0) counts[table] = (counts[table] ?? 0) + 1;
+    if (stmt.table && params.length > 0) counts[stmt.table] = (counts[stmt.table] ?? 0) + 1;
   }
   return counts;
 }

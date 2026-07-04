@@ -33,7 +33,7 @@ forge, so no token is needed.)
 
     e = entl.Entl(":memory:")
     stats = e.sink("./repo", entl.SinkTarget.Sqlite, path="data.sqlite", github=False)
-    print(stats["new_commits"], "commits")
+    print(stats.new_commits, "commits")
     ```
   </Tab>
 </Tabs>
@@ -91,7 +91,7 @@ With `--objects` (`objects: true`), Entl stores the full trees + blob contents, 
 
     const entl = new Entl(":memory:");
     await entl.sink("./repo", { target: SinkTarget.Sqlite, path: "data.sqlite", github: false, objects: true });
-    const commits = await entl.rebuild({ from: "sqlite", dest: "data.sqlite", out: "rebuilt" });
+    const commits = await entl.rebuild({ source: "sqlite", dest: "data.sqlite", out: "rebuilt" });
     console.log("rebuilt", commits, "commits");
     ```
   </Tab>
@@ -119,9 +119,9 @@ the sinks consume. Point it at a live store (like PGlite) and its realtime queri
 
     const entl = new Entl(":memory:");
     const changes = entl.changes("./repo");
-    for (let s; (s = await changes.next()) !== null; ) {
-      const batch = JSON.parse(s);
-      console.log(batch.op, batch.table, `${batch.rows.length} rows`);
+    for (let batch; (batch = await changes.next()) !== null; ) {
+      const rows = JSON.parse(batch.rowsJson);
+      console.log(batch.op, batch.table, `${rows.length} rows`);
     }
     ```
   </Tab>
@@ -130,9 +130,9 @@ the sinks consume. Point it at a live store (like PGlite) and its realtime queri
     import json, entl
 
     e = entl.Entl(":memory:")
-    for s in e.changes("./repo"):
-        batch = json.loads(s)
-        print(batch["op"], batch["table"], len(batch["rows"]), "rows")
+    for batch in e.changes("./repo"):
+        rows = json.loads(batch.rows_json)
+        print(batch.op, batch.table, len(rows), "rows")
     ```
   </Tab>
 </Tabs>

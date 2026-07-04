@@ -264,7 +264,9 @@ pub fn ingest_git_streamed(
                         r.parent_count, r.is_merge, r.gpg_signed,
                     ])?;
                     for p in &b.parents {
-                        pa.append_row(params![p.commit_oid.as_bytes(), p.parent_oid.as_bytes(), p.idx])?;
+                        // generated column order: (commit_oid, idx, parent_oid) — edge tables emit
+                        // source, LOCAL-KEY props, then target (schema_gen is canonical)
+                        pa.append_row(params![p.commit_oid.as_bytes(), p.idx, p.parent_oid.as_bytes()])?;
                     }
                     for c in &b.changes {
                         nfc += 1;
