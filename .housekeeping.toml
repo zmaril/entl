@@ -1,3 +1,4 @@
+logo = "site/public/duckling-mark.png"  # fleet dashboard logo
 # housekeeper overrides — see github.com/zmaril/housekeeping
 
 [checks]
