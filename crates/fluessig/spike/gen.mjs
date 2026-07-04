@@ -1,3 +1,4 @@
+// straitjacket-allow-file:duplication — frozen spike (the mechanism demo).
 // api.json -> generated Rust binding skeletons for napi (Node), PyO3 (Python), Magnus (Ruby),
 // plus the core trait the bindings call into.
 //

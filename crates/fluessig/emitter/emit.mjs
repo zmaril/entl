@@ -11,6 +11,10 @@
 // through the same validator (DESIGN §4, decision #8).
 //
 // Usage: fluessig-emit <schema.tsp> [--out <dir>]     (default out: beside the input)
+//
+// straitjacket-allow-file:duplication — the catalog and api emissions are
+// deliberately parallel walks of the same checked program (the dumb-printer
+// design, DESIGN §4); sharing more would couple the two layers' shapes.
 import { MANIFEST, NodeHost, compile, getDoc } from "@typespec/compiler";
 import { createRequire } from "module";
 import { resolve, dirname, basename } from "path";
@@ -143,9 +147,9 @@ export async function emit(inputPath, outDir) {
   };
 
   // ---- api.json: the op layer --------------------------------------------------
-  const apiType = (t) => {
-    const ty = typeRef(t);
-    if (typeof ty === "string") return ty; // void
+  // one lowering for both entry points: an already-lowered typeRef → an api type
+  const apiTypeOfRef = (ty) => {
+    if (typeof ty === "string") return ty; // void / null
     if (ty.k === "union") {
       // `T | null` → a nullable T (the one union the op surface supports)
       const parts = ty.of.filter((v) => v !== "null");
@@ -155,18 +159,10 @@ export async function emit(inputPath, outDir) {
     if (ty.k === "scalar") return ty.name;
     if (ty.k === "enum") return { enum: ty.name };
     if (ty.k === "ref") return { model: ty.name };
-    if (ty.k === "list") return { list: ty.of.k === "scalar" ? ty.of.name : { model: ty.of.name } };
+    if (ty.k === "list") return { list: apiTypeOfRef(ty.of) };
     throw new Error(`unsupported type in API surface: ${JSON.stringify(ty)}`);
   };
-
-  const apiTypeOfRef = (ty) => {
-    if (typeof ty === "string") return ty;
-    if (ty.k === "scalar") return ty.name;
-    if (ty.k === "enum") return { enum: ty.name };
-    if (ty.k === "ref") return { model: ty.name };
-    if (ty.k === "list") return { list: apiTypeOfRef(ty.of) };
-    throw new Error(`unsupported nullable inner type: ${JSON.stringify(ty)}`);
-  };
+  const apiType = (t) => apiTypeOfRef(typeRef(t));
 
   const interfaces = [...global.interfaces.values()].map((i) => ({
     name: i.name,
@@ -221,11 +217,7 @@ export async function emit(inputPath, outDir) {
         doc: m.doc ?? null,
         fields: m.fields.map((f) => ({
           name: f.name,
-          type:
-            f.type.k === "scalar" ? f.type.name
-            : f.type.k === "enum" ? { enum: f.type.name }
-            : f.type.k === "list" ? { list: f.type.of.k === "scalar" ? f.type.of.name : { model: f.type.of.name } }
-            : { model: f.type.name },
+          type: apiTypeOfRef(f.type),
           nullable: f.nullable,
         })),
       })),
