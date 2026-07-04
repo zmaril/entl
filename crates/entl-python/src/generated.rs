@@ -24,6 +24,9 @@ pub trait PollStream<T>: Send + Sync {
     fn poll(&self, timeout: Duration) -> Poll<T>;
 }
 
+/// Bulk bytes cross into Python as `bytes` (Arrow IPC payloads and friends).
+pub type Bytes = Vec<u8>;
+
 #[pyclass(eq, eq_int)]
 #[derive(Clone, Copy, PartialEq)]
 pub enum SinkTarget {
@@ -115,20 +118,56 @@ impl FileDiff {
     }
 }
 
-/// One change-stream batch (rows as JSON until the Arrow C-FFI handoff lands).
-#[pyclass(get_all)]
+/// One change-stream batch. The rows stay columnar (Arrow): `ipc` yields them as
+/// one Arrow IPC stream (a single RecordBatch, schema included), and the Python
+/// class additionally speaks the Arrow PyCapsule protocol for zero-copy import
+/// (`pa.record_batch(batch)`). Values are native Arrow types — oids are Binary,
+/// timestamps Timestamp(µs) — unlike query()/extract()'s canonical JSON (hex
+/// oids, RFC3339). No per-row `_op`: `op`/`table` ride this envelope.
+#[pyclass]
 #[derive(Clone)]
 pub struct ChangeBatch {
-    pub table: String,
-    pub op: String,
-    pub rows_json: String,
+    pub(crate) table: String,
+    pub(crate) op: String,
+    // the rows, still columnar — capsule-exported or encoded on demand
+    pub(crate) batch: entl_core::RecordBatch,
 }
 #[pymethods]
 impl ChangeBatch {
-    #[new]
-    #[pyo3(signature = (table, op, rows_json))]
-    fn new(table: String, op: String, rows_json: String) -> Self {
-        Self { table, op, rows_json }
+    #[getter]
+    fn table(&self) -> String {
+        self.table.clone()
+    }
+    #[getter]
+    fn op(&self) -> String {
+        self.op.clone()
+    }
+    /// The rows as one Arrow IPC stream (`pyarrow.ipc.open_stream`-able) —
+    /// for consumers that want bytes rather than the zero-copy capsules.
+    fn ipc(&self) -> PyResult<Bytes> {
+        entl_core::batch_ipc(&self.batch).map_err(err)
+    }
+    /// Arrow PyCapsule interface — the schema half of the C Data Interface.
+    fn __arrow_c_schema__(&self, py: Python<'_>) -> PyResult<Py<pyo3::types::PyCapsule>> {
+        let (_, schema) = entl_core::batch_to_ffi(&self.batch).map_err(err)?;
+        let name = std::ffi::CString::new("arrow_schema").expect("static cstr");
+        Ok(pyo3::types::PyCapsule::new(py, schema, Some(name))?.unbind())
+    }
+    /// Arrow PyCapsule interface — (schema, array) capsules; `pa.record_batch(batch)`
+    /// imports the rows zero-copy. `requested_schema` is accepted and ignored (spec-permitted).
+    #[pyo3(signature = (requested_schema=None))]
+    fn __arrow_c_array__(
+        &self,
+        py: Python<'_>,
+        requested_schema: Option<Bound<'_, PyAny>>,
+    ) -> PyResult<(Py<pyo3::types::PyCapsule>, Py<pyo3::types::PyCapsule>)> {
+        let _ = requested_schema;
+        let (array, schema) = entl_core::batch_to_ffi(&self.batch).map_err(err)?;
+        let sname = std::ffi::CString::new("arrow_schema").expect("static cstr");
+        let aname = std::ffi::CString::new("arrow_array").expect("static cstr");
+        let s = pyo3::types::PyCapsule::new(py, schema, Some(sname))?.unbind();
+        let a = pyo3::types::PyCapsule::new(py, array, Some(aname))?.unbind();
+        Ok((s, a))
     }
 }
 
@@ -267,6 +306,7 @@ pub trait EntlCore: Sized + Send + Sync + 'static {
     fn load_git(&self, repo_path: String) -> anyhow::Result<GitStats>;
     fn load_github(&self, repo_path: String) -> anyhow::Result<GithubStats>;
     fn query(&self, sql: String) -> anyhow::Result<String>;
+    fn query_arrow(&self, sql: String) -> anyhow::Result<Bytes>;
     fn sink(&self, repo_path: String, options: SinkOptions) -> anyhow::Result<SinkStats>;
     fn extract(&self, options: ExtractOptions) -> anyhow::Result<String>;
     fn changes(&self, repo_path: String, options: Option<ChangesOptions>) -> anyhow::Result<Box<dyn PollStream<ChangeBatch>>>;
@@ -387,6 +427,13 @@ impl Entl {
     fn query(&self, py: Python<'_>, sql: String) -> PyResult<String> {
         let core = self.core.clone();
         py.detach(move || core.query(sql)).map_err(err)
+    }
+    /// Run a SQL query; the result as one Arrow IPC stream (schema + all batches) —
+    /// the dataframe on-ramp (pyarrow → pandas/polars, apache-arrow JS, red-arrow).
+    #[pyo3(signature = (sql))]
+    fn query_arrow(&self, py: Python<'_>, sql: String) -> PyResult<Bytes> {
+        let core = self.core.clone();
+        py.detach(move || core.query_arrow(sql)).map_err(err)
     }
     /// Pull `repoPath` and sync it into a target store, in one call.
     #[pyo3(signature = (repo_path, target, path=None, github=None, tables=None, exclude=None, rename=None, schema=None, objects=None))]

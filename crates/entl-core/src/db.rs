@@ -88,6 +88,25 @@ impl Db {
             stmt.query_arrow([])?.collect();
         Ok(duckdb::arrow::util::pretty::pretty_format_batches(&batches)?.to_string())
     }
+
+    /// Run a query; the whole result as one Arrow IPC stream (schema + every
+    /// batch). The dataframe on-ramp: pyarrow / apache-arrow JS / red-arrow
+    /// decode it directly. `stmt.schema()` (valid after execution) covers the
+    /// zero-row case — the stream still carries the schema.
+    pub fn query_arrow_ipc(&self, sql: &str) -> Result<Vec<u8>> {
+        let mut stmt = self.conn.prepare(sql)?;
+        let batches: Vec<duckdb::arrow::record_batch::RecordBatch> =
+            stmt.query_arrow([])?.collect();
+        let schema = stmt.schema();
+        let mut buf = Vec::new();
+        let mut w = arrow::ipc::writer::StreamWriter::try_new(&mut buf, schema.as_ref())?;
+        for b in &batches {
+            w.write(b)?;
+        }
+        w.finish()?;
+        drop(w);
+        Ok(buf)
+    }
 }
 
 /// A stable content hash of the whole schema (the generated DuckDB tables + the extras). FNV-1a,
@@ -108,4 +127,30 @@ fn schema_hash() -> String {
     }
     h = fnv(h, DUCKDB_EXTRAS);
     format!("{h:016x}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn query_arrow_ipc_round_trips_and_covers_zero_rows() {
+        let db = Db::open(":memory:").unwrap();
+        let decode = |ipc: Vec<u8>| {
+            let r = arrow::ipc::reader::StreamReader::try_new(std::io::Cursor::new(ipc), None)
+                .unwrap();
+            let schema = r.schema();
+            let batches: Vec<_> = r.map(|b| b.unwrap()).collect();
+            (schema, batches)
+        };
+
+        let (schema, batches) = decode(db.query_arrow_ipc("SELECT 1 AS x").unwrap());
+        assert_eq!(schema.field(0).name(), "x");
+        assert_eq!(batches.iter().map(|b| b.num_rows()).sum::<usize>(), 1);
+
+        // Zero rows: the stream still carries the schema and decodes cleanly.
+        let (schema, batches) = decode(db.query_arrow_ipc("SELECT 1 AS y WHERE false").unwrap());
+        assert_eq!(schema.field(0).name(), "y");
+        assert_eq!(batches.iter().map(|b| b.num_rows()).sum::<usize>(), 0);
+    }
 }

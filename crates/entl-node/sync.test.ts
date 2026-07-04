@@ -4,28 +4,10 @@
 // the rows actually land in a real Postgres-compatible database.
 
 import { test, expect } from "bun:test";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { PGlite } from "@electric-sql/pglite";
 import { Entl } from "./index.js";
 import { syncInto, EntlTables } from "./sync.ts";
-
-function fixtureRepo(): string {
-  const repo = mkdtempSync(join(tmpdir(), "entl-sync-repo-"));
-  const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args], { stdio: "ignore" });
-  execFileSync("git", ["init", "-q", repo], { stdio: "ignore" });
-  git("config", "user.email", "t@e.com");
-  git("config", "user.name", "Tester");
-  writeFileSync(join(repo, "a.txt"), "hello\n");
-  git("add", "-A");
-  git("commit", "-qm", "first");
-  writeFileSync(join(repo, "b.txt"), "world\n");
-  git("add", "-A");
-  git("commit", "-qm", "second");
-  return repo;
-}
+import { fixtureRepo } from "./test-fixtures.ts";
 
 test("syncInto mirrors entl's DuckDB into a live PGlite via the Rust driver plan", async () => {
   const repo = fixtureRepo();

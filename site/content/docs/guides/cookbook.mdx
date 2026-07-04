@@ -109,30 +109,71 @@ With `--objects` (`objects: true`), Entl stores the full trees + blob contents, 
 
 ## Stream changes as they land
 
-The **stream plane**: iterate the change batches from a pull (`{table, op, rows}`), the same events
-the sinks consume. Point it at a live store (like PGlite) and its realtime queries update for free.
+The **stream plane**: iterate the change batches from a pull, the same events the sinks consume.
+The rows stay **columnar Arrow** all the way across the FFI — in JS decode the batch's IPC bytes
+with `apache-arrow`; in Python the batch itself speaks the [Arrow PyCapsule
+protocol](https://arrow.apache.org/docs/format/CDataInterface/PyCapsuleInterface.html), so
+`pa.record_batch(batch)` imports it zero-copy (no pyarrow inside entl — bring your own Arrow).
+Values are native Arrow types (oids are binary, timestamps are timestamps) — unlike
+`query()`/`extract()`, which keep the canonical JSON form (hex oids, RFC3339).
 
 <Tabs groupId="lang" persist items={['Node', 'Python']}>
   <Tab value="Node">
     ```js
     import { Entl } from "@entl/node";
+    import { tableFromIPC } from "apache-arrow";
 
     const entl = new Entl(":memory:");
     const changes = entl.changes("./repo");
     for (let batch; (batch = await changes.next()) !== null; ) {
-      const rows = JSON.parse(batch.rowsJson);
-      console.log(batch.op, batch.table, `${rows.length} rows`);
+      const rows = tableFromIPC(batch.ipc);
+      console.log(batch.op, batch.table, `${rows.numRows} rows`);
     }
     ```
   </Tab>
   <Tab value="Python">
     ```python
-    import json, entl
+    import entl
+    import pyarrow as pa
 
     e = entl.Entl(":memory:")
     for batch in e.changes("./repo"):
-        rows = json.loads(batch.rows_json)
-        print(batch.op, batch.table, len(rows), "rows")
+        rows = pa.record_batch(batch)  # zero-copy via the PyCapsule interface
+        print(batch.op, batch.table, rows.num_rows, "rows")
+    ```
+  </Tab>
+</Tabs>
+
+## Query into a dataframe
+
+`queryArrow` returns the whole result set as one Arrow IPC stream — the direct on-ramp to
+dataframes (`pyarrow` → pandas/polars, `apache-arrow`'s `Table` in JS) with no JSON in between.
+
+<Tabs groupId="lang" persist items={['Node', 'Python']}>
+  <Tab value="Node">
+    ```js
+    import { Entl } from "@entl/node";
+    import { tableFromIPC } from "apache-arrow";
+
+    const entl = new Entl(":memory:");
+    await entl.loadGit("./repo");
+    const t = tableFromIPC(await entl.queryArrow(
+      "SELECT author_name, count(*)::int AS commits FROM commits GROUP BY 1"
+    ));
+    console.log(t.numRows, "authors");
+    ```
+  </Tab>
+  <Tab value="Python">
+    ```python
+    import entl
+    import pyarrow as pa
+
+    e = entl.Entl(":memory:")
+    e.load_git("./repo")
+    t = pa.ipc.open_stream(e.query_arrow(
+        "SELECT author_name, count(*)::int AS commits FROM commits GROUP BY 1"
+    )).read_all()
+    print(t.num_rows, "authors")
     ```
   </Tab>
 </Tabs>

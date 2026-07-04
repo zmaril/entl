@@ -69,7 +69,13 @@ t("cookbook examples all run", () => {
         r = run("bash", ["-eu", "-c", b.code], T, dirname(ENTL_BIN!));
       } else if (b.lang === "js" || b.lang === "ts") {
         const file = join(T, "block.mjs");
-        writeFileSync(file, b.code.replaceAll('"@entl/node"', JSON.stringify(NODE_INDEX)));
+        // Blocks run from a tmpdir, so bare imports get rewritten to local
+        // resolutions: the built addon, and entl-node's node_modules for
+        // apache-arrow (a devDep there; site/ stays install-free for this test).
+        const code = b.code
+          .replaceAll('"@entl/node"', JSON.stringify(NODE_INDEX))
+          .replaceAll('"apache-arrow"', JSON.stringify(join(ROOT, "crates/entl-node/node_modules/apache-arrow/Arrow.mjs")));
+        writeFileSync(file, code);
         r = run("bun", [file], T);
       } else {
         const file = join(T, "block.py");

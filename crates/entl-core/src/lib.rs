@@ -37,4 +37,9 @@ pub use gitwrite::{fast_import_stream, git, import, SnapCommit, SnapRef};
 pub use pull::{build_sink, pull_into, PullOpts, SinkOutcome, SinkTarget};
 pub use rebuild::{rebuild_from_snapshot, rebuild_from_store, rebuild_store};
 pub use sink::{drain, JsonlSink, PostgresSink, Sink, SinkSelect, SqliteSink};
-pub use stream::{change_channel, ChangeBatch, ChangeOp, ChangeStream, ChangeSink, Poll};
+pub use stream::{
+    batch_ipc, batch_to_ffi, change_channel, ChangeBatch, ChangeOp, ChangeStream, ChangeSink, Poll,
+};
+/// The Arrow batch type the change stream carries — re-exported so the generated
+/// bindings can name it (`entl_core::RecordBatch`) without their own arrow dep.
+pub use duckdb::arrow::record_batch::RecordBatch;

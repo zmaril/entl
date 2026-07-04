@@ -27,6 +27,9 @@ pub trait PollStream<T>: Send + Sync {
     fn poll(&self, timeout: Duration) -> Poll<T>;
 }
 
+/// Bulk bytes cross into JS as a Buffer (Arrow IPC payloads and friends).
+pub type Bytes = napi::bindgen_prelude::Buffer;
+
 #[napi]
 #[derive(Clone, Copy)]
 pub enum SinkTarget {
@@ -86,13 +89,35 @@ pub struct FileDiff {
     pub patch: String,
 }
 
-/// One change-stream batch (rows as JSON until the Arrow C-FFI handoff lands).
-#[napi(object)]
+/// One change-stream batch. The rows stay columnar (Arrow): `ipc` yields them as
+/// one Arrow IPC stream (a single RecordBatch, schema included), and the Python
+/// class additionally speaks the Arrow PyCapsule protocol for zero-copy import
+/// (`pa.record_batch(batch)`). Values are native Arrow types — oids are Binary,
+/// timestamps Timestamp(µs) — unlike query()/extract()'s canonical JSON (hex
+/// oids, RFC3339). No per-row `_op`: `op`/`table` ride this envelope.
+#[napi]
 #[derive(Clone)]
 pub struct ChangeBatch {
-    pub table: String,
-    pub op: String,
-    pub rows_json: String,
+    pub(crate) table: String,
+    pub(crate) op: String,
+    // the rows, still columnar — encoded only when the getter is hit
+    pub(crate) batch: entl_core::RecordBatch,
+}
+#[napi]
+impl ChangeBatch {
+    #[napi(getter)]
+    pub fn table(&self) -> String {
+        self.table.clone()
+    }
+    #[napi(getter)]
+    pub fn op(&self) -> String {
+        self.op.clone()
+    }
+    /// The rows as one Arrow IPC stream — decode with `tableFromIPC` (apache-arrow).
+    #[napi(getter, ts_return_type = "Buffer")]
+    pub fn ipc(&self) -> Result<Bytes> {
+        Ok(entl_core::batch_ipc(&self.batch).map_err(err)?.into())
+    }
 }
 
 /// One driver-plan statement: the host runs it verbatim against its own client.
@@ -174,6 +199,7 @@ pub trait EntlCore: Sized + Send + Sync + 'static {
     fn load_git(&self, repo_path: String) -> anyhow::Result<GitStats>;
     fn load_github(&self, repo_path: String) -> anyhow::Result<GithubStats>;
     fn query(&self, sql: String) -> anyhow::Result<String>;
+    fn query_arrow(&self, sql: String) -> anyhow::Result<Bytes>;
     fn sink(&self, repo_path: String, options: SinkOptions) -> anyhow::Result<SinkStats>;
     fn extract(&self, options: ExtractOptions) -> anyhow::Result<String>;
     fn changes(&self, repo_path: String, options: Option<ChangesOptions>) -> anyhow::Result<Box<dyn PollStream<ChangeBatch>>>;
@@ -416,6 +442,21 @@ impl Task for QueryTask {
     }
 }
 
+pub struct QueryArrowTask {
+    core: Arc<crate::core_impl::EntlImpl>,
+    sql: String,
+}
+impl Task for QueryArrowTask {
+    type Output = Bytes;
+    type JsValue = Bytes;
+    fn compute(&mut self) -> Result<Self::Output> {
+        self.core.query_arrow(self.sql.clone()).map_err(err)
+    }
+    fn resolve(&mut self, _env: Env, o: Self::Output) -> Result<Self::JsValue> {
+        Ok(o)
+    }
+}
+
 pub struct SinkTask {
     core: Arc<crate::core_impl::EntlImpl>,
     repo_path: String,
@@ -490,6 +531,12 @@ impl Entl {
     #[napi(ts_return_type = "Promise<string>")]
     pub fn query(&self, sql: String) -> AsyncTask<QueryTask> {
         AsyncTask::new(QueryTask { core: self.core.clone(), sql })
+    }
+    /// Run a SQL query; the result as one Arrow IPC stream (schema + all batches) —
+    /// the dataframe on-ramp (pyarrow → pandas/polars, apache-arrow JS, red-arrow).
+    #[napi(ts_return_type = "Promise<Buffer>")]
+    pub fn query_arrow(&self, sql: String) -> AsyncTask<QueryArrowTask> {
+        AsyncTask::new(QueryArrowTask { core: self.core.clone(), sql })
     }
     /// Pull `repoPath` and sync it into a target store, in one call.
     #[napi(ts_return_type = "Promise<SinkStats>")]

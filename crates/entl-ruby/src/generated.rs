@@ -27,6 +27,9 @@ pub trait PollStream<T>: Send + Sync {
     fn poll(&self, timeout: Duration) -> Poll<T>;
 }
 
+/// Bulk bytes cross into Ruby as a binary String (via magnus's `bytes` feature).
+pub type Bytes = bytes::Bytes;
+
 #[derive(Clone, Copy, PartialEq)]
 pub enum SinkTarget {
     Sqlite,
@@ -184,13 +187,19 @@ impl FileDiff {
     }
 }
 
-/// One change-stream batch (rows as JSON until the Arrow C-FFI handoff lands).
+/// One change-stream batch. The rows stay columnar (Arrow): `ipc` yields them as
+/// one Arrow IPC stream (a single RecordBatch, schema included), and the Python
+/// class additionally speaks the Arrow PyCapsule protocol for zero-copy import
+/// (`pa.record_batch(batch)`). Values are native Arrow types — oids are Binary,
+/// timestamps Timestamp(µs) — unlike query()/extract()'s canonical JSON (hex
+/// oids, RFC3339). No per-row `_op`: `op`/`table` ride this envelope.
 #[magnus::wrap(class = "Entl::ChangeBatch", free_immediately, size)]
 #[derive(Clone)]
 pub struct ChangeBatch {
-    pub table: String,
-    pub op: String,
-    pub rows_json: String,
+    pub(crate) table: String,
+    pub(crate) op: String,
+    // the rows, still columnar — encoded only when the getter is hit
+    pub(crate) batch: entl_core::RecordBatch,
 }
 impl ChangeBatch {
     fn get_table(&self) -> String {
@@ -199,8 +208,9 @@ impl ChangeBatch {
     fn get_op(&self) -> String {
         self.op.clone()
     }
-    fn get_rows_json(&self) -> String {
-        self.rows_json.clone()
+    /// The rows as one Arrow IPC stream, as a binary String (red-arrow decodes it).
+    fn get_ipc(&self) -> Result<Bytes, Error> {
+        Ok(Bytes::from(entl_core::batch_ipc(&self.batch).map_err(rberr)?))
     }
 }
 
@@ -288,6 +298,7 @@ pub trait EntlCore: Sized + Send + Sync + 'static {
     fn load_git(&self, repo_path: String) -> anyhow::Result<GitStats>;
     fn load_github(&self, repo_path: String) -> anyhow::Result<GithubStats>;
     fn query(&self, sql: String) -> anyhow::Result<String>;
+    fn query_arrow(&self, sql: String) -> anyhow::Result<Bytes>;
     fn sink(&self, repo_path: String, options: SinkOptions) -> anyhow::Result<SinkStats>;
     fn extract(&self, options: ExtractOptions) -> anyhow::Result<String>;
     fn changes(&self, repo_path: String, options: Option<ChangesOptions>) -> anyhow::Result<Box<dyn PollStream<ChangeBatch>>>;
@@ -392,6 +403,11 @@ impl Entl {
     fn query(&self, sql: String) -> Result<String, Error> {
         self.core.query(sql).map_err(rberr)
     }
+    /// Run a SQL query; the result as one Arrow IPC stream (schema + all batches) —
+    /// the dataframe on-ramp (pyarrow → pandas/polars, apache-arrow JS, red-arrow).
+    fn query_arrow(&self, sql: String) -> Result<Bytes, Error> {
+        self.core.query_arrow(sql).map_err(rberr)
+    }
     /// Pull `repoPath` and sync it into a target store, in one call.
     fn sink(&self, args: &[magnus::Value]) -> Result<SinkStats, Error> {
         let a = magnus::scan_args::scan_args::<(String, String,), (Option<String>, Option<bool>, Option<Vec<String>>, Option<Vec<String>>, Option<String>, Option<bool>,), (), (), (), ()>(args)?;
@@ -477,7 +493,7 @@ pub fn register(ruby: &Ruby) -> Result<(), Error> {
     let c = class.define_class("ChangeBatch", ruby.class_object())?;
     c.define_method("table", method!(ChangeBatch::get_table, 0))?;
     c.define_method("op", method!(ChangeBatch::get_op, 0))?;
-    c.define_method("rows_json", method!(ChangeBatch::get_rows_json, 0))?;
+    c.define_method("ipc", method!(ChangeBatch::get_ipc, 0))?;
     let c = class.define_class("Statement", ruby.class_object())?;
     c.define_method("sql", method!(Statement::get_sql, 0))?;
     c.define_method("params", method!(Statement::get_params, 0))?;
@@ -496,6 +512,7 @@ pub fn register(ruby: &Ruby) -> Result<(), Error> {
     class.define_method("load_git", method!(Entl::load_git, 1))?;
     class.define_method("load_github", method!(Entl::load_github, 1))?;
     class.define_method("query", method!(Entl::query, 1))?;
+    class.define_method("query_arrow", method!(Entl::query_arrow, 1))?;
     class.define_method("sink", method!(Entl::sink, -1))?;
     class.define_method("extract", method!(Entl::extract, -1))?;
     class.define_method("changes", method!(Entl::changes, -1))?;

@@ -50,6 +50,9 @@ REJECTED: GH Archive (gharchive.org / BigQuery firehose).
 Context: notes/design/testing.md + multidb.md.
 
 # testing
+[ ] Exercise the ChangeBatch PyCapsule protocol against polars + pandas (not just pyarrow):
+    pl.DataFrame(batch) / pd.api.interchange-or-pa-roundtrip. Same spec'd interface, but
+    "should work" isn't tested — add as optional-import cases in test_arrow.py.
 [ ] Check the proptest regression corpus into git as it appears
     (crates/entl-testkit/proptest-regressions/) + a few curated feature worlds.
 [x] Mock Actions/Checks in the mock GitHub server — it returns empty today, so

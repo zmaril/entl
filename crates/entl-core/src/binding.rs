@@ -112,16 +112,17 @@ macro_rules! binding_core_impls {
         }
     }
     
-    /// Adapt an entl-core change stream to the generated poll contract.
+    /// Adapt an entl-core change stream to the generated poll contract. The rows
+    /// stay columnar — the DTO holds the RecordBatch and each language surfaces
+    /// it lazily (IPC getter / PyCapsules), so nothing is encoded here.
     struct ChangesStream($crate::ChangeStream);
     impl PollStream<ChangeBatch> for ChangesStream {
         fn poll(&self, timeout: Duration) -> Poll<ChangeBatch> {
             match self.0.poll(timeout) {
                 $crate::Poll::Batch(b) => Poll::Item(ChangeBatch {
-                    table: b.table.clone(),
+                    table: b.table,
                     op: b.op.as_str().to_string(),
-                    rows_json: serde_json::to_string(&$crate::sink::batch_to_json(&b))
-                        .unwrap_or_else(|_| "[]".into()),
+                    batch: b.batch,
                 }),
                 $crate::Poll::Idle => Poll::Idle,
                 $crate::Poll::Closed => Poll::Closed,
@@ -185,6 +186,11 @@ macro_rules! binding_core_impls {
                 "SELECT CAST(COALESCE(json_group_array(to_json(__t)), '[]') AS VARCHAR) FROM ({sql}) AS __t"
             );
             Ok(db.conn.query_row(&wrapped, [], |r| r.get(0))?)
+        }
+
+        fn query_arrow(&self, sql: String) -> Result<Bytes> {
+            let db = self.worker()?;
+            Ok(db.query_arrow_ipc(&sql)?.into())
         }
     
         fn sink(&self, repo_path: String, options: SinkOptions) -> Result<SinkStats> {

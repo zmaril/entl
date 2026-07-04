@@ -49,20 +49,22 @@ bun test                         # coverage test: the sink must cover every entl
 
 # the Python addon (PyO3 → maturin). Excluded from the default cargo set, like entl-node.
 cd crates/entl-python
-uv venv && uv pip install maturin pytest
+uv venv && uv pip install --group dev   # ALL build/test deps — declared once in pyproject's
+                                        # [dependency-groups] (maturin/pytest/sqlalchemy/pyarrow;
+                                        # entl itself ships no pyarrow — ChangeBatch speaks the
+                                        # PyCapsule interface, consumers bring their own Arrow)
 # Use the venv's own maturin/python (NOT `uv run maturin` — its editable install can load a
 # stale .so after a rebuild).
 .venv/bin/maturin develop
-uv pip install sqlalchemy           # the `orm` extra, for entl.models + its test
 # entl.models is GENERATED from the fluessig catalog — regenerate via `bun run gen`
 # in crates/entl-node (one command regenerates every ORM artifact + the Rust schema).
-.venv/bin/python -m pytest tests/   # sink/extract/rebuild/matrix + the SQLAlchemy models
+.venv/bin/python -m pytest tests/   # sink/extract/rebuild/matrix/arrow + the SQLAlchemy models
 
 # the Ruby addon (Magnus, rb_sys). Needs a Ruby 3.x/4.x + LIBCLANG_PATH → arm64 libclang.
 cd crates/entl-ruby
-gem install rb_sys minitest
-LIBCLANG_PATH=/Library/Developer/CommandLineTools/usr/lib ruby extconf.rb && make
-ruby -I. -Itest test/test_entl.rb   # Entl.new / sink / query / extract
+bundle install                      # deps declared once in the Gemfile (rb_sys, minitest)
+LIBCLANG_PATH=/Library/Developer/CommandLineTools/usr/lib bundle exec ruby extconf.rb && make
+bundle exec ruby -I. -Itest test/test_entl.rb   # Entl.new / sink / query / extract / arrow ipc
 
 # the CLI: pull a repo and sync into a target DB (sqlite / jsonl / postgres)
 ./target/release/entl sink ./some-repo --to sqlite   --dest out.db
@@ -137,6 +139,10 @@ maturin develop`), and the CLI (`cargo build --release`). The docs generator rea
   whose source is missing and keeps the committed copy.
 - The docs reference generator escapes MDX-special chars in ported prose (`{`/`}`/`|`); see
   notes/design/docs.md if a schema comment breaks the build.
+- entl-core's direct `arrow` dependency must stay in **version-lockstep with the arrow that
+  the duckdb crate depends on** (cargo then unifies them into one crate, keeping `RecordBatch`
+  a single type). On a duckdb bump, bump `arrow` to duckdb's arrow major — two arrows in
+  Cargo.lock means the Arrow handoff stops compiling.
 
 ## Working agreement
 
