@@ -418,7 +418,9 @@ pub fn rust_schema_module(c: &Catalog) -> String {
          //!\n\
          //! Regenerate:\n\
          //!   cargo run -p fluessig --bin fluessig-gen -- \\\n\
-         //!     crates/fluessig/catalog.json crates/entl-core/src/schema_gen.rs\n\n\
+         //!     crates/fluessig/catalog.json crates/entl-core/src/schema_gen.rs\n\
+         //!\n\
+         //! straitjacket-allow-file:duplication — generated code repeats by design.\n\n\
          /// One table's schema, as code.\n\
          pub struct TableSchema {\n\
          \x20   pub name: &'static str,\n\

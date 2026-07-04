@@ -1,3 +1,4 @@
+// straitjacket-allow-file:duplication (generated)
 // GENERATED — the contract the bindings call into. Hand-implement this over entl-core.
 use std::time::Duration;
 

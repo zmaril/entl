@@ -1,3 +1,4 @@
+// straitjacket-allow-file:duplication (generated)
 // GENERATED — Magnus binding skeleton. Mirrors the hand-written patterns of entl-ruby.
 // Ruby's GVL serialises access; unary calls run inline (nogvl is a per-op opt-in later).
 use std::cell::RefCell;

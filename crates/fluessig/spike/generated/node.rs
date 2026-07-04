@@ -1,3 +1,4 @@
+// straitjacket-allow-file:duplication (generated)
 // GENERATED — napi binding skeleton. Mirrors the hand-written patterns of entl-node.
 use std::sync::Arc;
 use std::time::Duration;

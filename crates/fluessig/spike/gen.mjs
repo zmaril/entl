@@ -38,7 +38,7 @@ const coreArgsDirect = (op) => op.params.map((p) => (p.type === "string" ? `&${s
 
 // ---------------------------------------------------------------- core.rs (the contract)
 function genCore() {
-  let out = `// GENERATED — the contract the bindings call into. Hand-implement this over entl-core.
+  let out = `// straitjacket-allow-file:duplication (generated)\n// GENERATED — the contract the bindings call into. Hand-implement this over entl-core.
 use std::time::Duration;
 
 `;
@@ -74,7 +74,7 @@ pub trait PollStream<T>: Send + Sync {
 
 // ---------------------------------------------------------------- node.rs (napi-rs)
 function genNode() {
-  let out = `// GENERATED — napi binding skeleton. Mirrors the hand-written patterns of entl-node.
+  let out = `// straitjacket-allow-file:duplication (generated)\n// GENERATED — napi binding skeleton. Mirrors the hand-written patterns of entl-node.
 use std::sync::Arc;
 use std::time::Duration;
 use napi::bindgen_prelude::{AsyncTask, Result};
@@ -176,7 +176,7 @@ impl ${S} {
 
 // ---------------------------------------------------------------- python.rs (PyO3)
 function genPython() {
-  let out = `// GENERATED — PyO3 binding skeleton. Mirrors the hand-written patterns of entl-python.
+  let out = `// straitjacket-allow-file:duplication (generated)\n// GENERATED — PyO3 binding skeleton. Mirrors the hand-written patterns of entl-python.
 use std::sync::Arc;
 use std::time::Duration;
 use pyo3::exceptions::PyRuntimeError;
@@ -250,7 +250,7 @@ impl ${S} {
 
 // ---------------------------------------------------------------- ruby.rs (Magnus)
 function genRuby() {
-  let out = `// GENERATED — Magnus binding skeleton. Mirrors the hand-written patterns of entl-ruby.
+  let out = `// straitjacket-allow-file:duplication (generated)\n// GENERATED — Magnus binding skeleton. Mirrors the hand-written patterns of entl-ruby.
 // Ruby's GVL serialises access; unary calls run inline (nogvl is a per-op opt-in later).
 use std::cell::RefCell;
 use std::sync::Arc;

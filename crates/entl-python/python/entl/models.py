@@ -1,5 +1,6 @@
 # AUTO-GENERATED from the fluessig catalog (crates/fluessig/entl.tsp). Do not edit by hand.
 # Regenerate: the fluessig-gen command in crates/fluessig/plan.txt (or `bun run gen` in crates/entl-node).
+# straitjacket-allow-file:duplication — generated code repeats by design.
 
 from sqlalchemy import Boolean, Column, Integer, String, event
 from sqlalchemy.orm import declarative_base

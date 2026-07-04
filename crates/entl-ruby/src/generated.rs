@@ -3,6 +3,7 @@
 //! Ruby surface notes: options bags are flattened to trailing OPTIONAL POSITIONAL args
 //! (kwargs are a follow-up); enum params are lowercase strings; input-model fields
 //! (e.g. sink's `rename`) are not exposed yet.
+//! straitjacket-allow-file:duplication — generated code repeats by design.
 #![allow(clippy::all)]
 
 use std::sync::Arc;

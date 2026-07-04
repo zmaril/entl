@@ -1,3 +1,4 @@
+// straitjacket-allow-file:duplication (generated)
 // GENERATED — PyO3 binding skeleton. Mirrors the hand-written patterns of entl-python.
 use std::sync::Arc;
 use std::time::Duration;

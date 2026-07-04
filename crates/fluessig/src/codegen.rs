@@ -40,7 +40,7 @@ fn pascal(s: &str) -> String {
     it.next().map(|f| f.to_ascii_uppercase().to_string() + it.as_str()).unwrap_or_default()
 }
 
-const BANNER: &str = "AUTO-GENERATED from the fluessig catalog (crates/fluessig/entl.tsp). Do not edit by hand.\nRegenerate: the fluessig-gen command in crates/fluessig/plan.txt (or `bun run gen` in crates/entl-node).";
+const BANNER: &str = "AUTO-GENERATED from the fluessig catalog (crates/fluessig/entl.tsp). Do not edit by hand.\nRegenerate: the fluessig-gen command in crates/fluessig/plan.txt (or `bun run gen` in crates/entl-node).\nstraitjacket-allow-file:duplication — generated code repeats by design.";
 
 /// `entl.models` — the SQLAlchemy read-plane. Typed generically so the same
 /// models work against any store the data was sunk into (SQLite/Postgres):
