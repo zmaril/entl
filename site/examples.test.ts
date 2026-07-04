@@ -70,11 +70,11 @@ t("cookbook examples all run", () => {
       } else if (b.lang === "js" || b.lang === "ts") {
         const file = join(T, "block.mjs");
         // Blocks run from a tmpdir, so bare imports get rewritten to local
-        // resolutions: the built addon, and site's own node_modules for
-        // apache-arrow (the Arrow-consuming recipes).
+        // resolutions: the built addon, and entl-node's node_modules for
+        // apache-arrow (a devDep there; site/ stays install-free for this test).
         const code = b.code
           .replaceAll('"@entl/node"', JSON.stringify(NODE_INDEX))
-          .replaceAll('"apache-arrow"', JSON.stringify(join(SITE, "node_modules/apache-arrow/Arrow.mjs")));
+          .replaceAll('"apache-arrow"', JSON.stringify(join(ROOT, "crates/entl-node/node_modules/apache-arrow/Arrow.mjs")));
         writeFileSync(file, code);
         r = run("bun", [file], T);
       } else {
