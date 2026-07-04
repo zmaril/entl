@@ -23,6 +23,11 @@ scalar Oid extends bytes;
 /** an opaque JSON payload column (query via json_extract / ::JSON) */
 scalar Json extends string;
 
+/** one Arrow RecordBatch, held columnar and surfaced per language: an IPC-bytes
+ * getter everywhere, plus the Arrow PyCapsule protocol (zero-copy C Data
+ * Interface) in Python */
+scalar ArrowBatch;
+
 enum RefKind {
   branch,
   tag,
@@ -649,11 +654,16 @@ model FileDiff {
   patch: string;
 }
 
-/** One change-stream batch (rows as JSON until the Arrow C-FFI handoff lands). */
+/** One change-stream batch. The rows stay columnar (Arrow): `ipc` yields them as
+ * one Arrow IPC stream (a single RecordBatch, schema included), and the Python
+ * class additionally speaks the Arrow PyCapsule protocol for zero-copy import
+ * (`pa.record_batch(batch)`). Values are native Arrow types — oids are Binary,
+ * timestamps Timestamp(µs) — unlike query()/extract()'s canonical JSON (hex
+ * oids, RFC3339). No per-row `_op`: `op`/`table` ride this envelope. */
 model ChangeBatch {
   table: string;
   `op`: string;
-  rowsJson: string;
+  ipc: ArrowBatch;
 }
 
 /** One driver-plan statement: the host runs it verbatim against its own client. */
@@ -763,6 +773,10 @@ interface Entl {
 
   /** Run a SQL query; JSON rows back. */
   query(sql: string): string;
+
+  /** Run a SQL query; the result as one Arrow IPC stream (schema + all batches) —
+   * the dataframe on-ramp (pyarrow → pandas/polars, apache-arrow JS, red-arrow). */
+  queryArrow(sql: string): bytes;
 
   /** Pull `repoPath` and sync it into a target store, in one call. */
   sink(repoPath: string, options: SinkOptions): SinkStats;

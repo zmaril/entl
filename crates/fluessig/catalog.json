@@ -13,6 +13,9 @@
     {
       "name": "Json",
       "base": "string"
+    },
+    {
+      "name": "ArrowBatch"
     }
   ],
   "enums": [
@@ -2704,7 +2707,7 @@
     },
     {
       "name": "ChangeBatch",
-      "doc": "One change-stream batch (rows as JSON until the Arrow C-FFI handoff lands).",
+      "doc": "One change-stream batch. The rows stay columnar (Arrow): `ipc` yields them as\none Arrow IPC stream (a single RecordBatch, schema included), and the Python\nclass additionally speaks the Arrow PyCapsule protocol for zero-copy import\n(`pa.record_batch(batch)`). Values are native Arrow types — oids are Binary,\ntimestamps Timestamp(µs) — unlike query()/extract()'s canonical JSON (hex\noids, RFC3339). No per-row `_op`: `op`/`table` ride this envelope.",
       "fields": [
         {
           "name": "table",
@@ -2723,10 +2726,10 @@
           "nullable": false
         },
         {
-          "name": "rowsJson",
+          "name": "ipc",
           "type": {
             "k": "scalar",
-            "name": "string"
+            "name": "ArrowBatch"
           },
           "nullable": false
         }

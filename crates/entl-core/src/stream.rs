@@ -138,6 +138,33 @@ pub fn change_channel(capacity: usize) -> (ChangeSink, ChangeStream) {
     (ChangeSink { tx }, ChangeStream { rx })
 }
 
+/// One `RecordBatch` as an Arrow IPC stream (schema + the batch + EOS) — the
+/// bytes a binding hands its host language when a pointer can't cross (arrow JS
+/// speaks IPC only; red-arrow stays optional). The `arrow` crate here is the
+/// same one duckdb re-exports (cargo unifies the version), so no cross-version
+/// copying happens on the way in.
+pub fn batch_ipc(batch: &RecordBatch) -> anyhow::Result<Vec<u8>> {
+    let mut buf = Vec::new();
+    let mut w = arrow::ipc::writer::StreamWriter::try_new(&mut buf, batch.schema_ref())?;
+    w.write(batch)?;
+    w.finish()?;
+    drop(w);
+    Ok(buf)
+}
+
+/// Export a batch through the **Arrow C Data Interface**: the `(array, schema)`
+/// FFI structs for a struct-array view of the rows. The caller moves them into
+/// its language's capsule/pointer mechanism (e.g. Python PyCapsules) for a
+/// zero-copy handoff; their `Drop` honors the release callback, so an
+/// unconsumed export cannot leak.
+pub fn batch_to_ffi(
+    batch: &RecordBatch,
+) -> anyhow::Result<(arrow::ffi::FFI_ArrowArray, arrow::ffi::FFI_ArrowSchema)> {
+    use arrow::array::Array;
+    let sa: arrow::array::StructArray = batch.clone().into();
+    Ok(arrow::ffi::to_ffi(&sa.into_data())?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -176,6 +203,17 @@ mod tests {
         let (sink, stream) = change_channel(4);
         drop(sink);
         assert!(matches!(stream.poll(Duration::from_millis(10)), Poll::Closed));
+    }
+
+    #[test]
+    fn batch_ipc_round_trips_through_a_stream_reader() {
+        let ipc = batch_ipc(&tiny_batch(3)).unwrap();
+        let reader =
+            arrow::ipc::reader::StreamReader::try_new(std::io::Cursor::new(ipc), None).unwrap();
+        let batches: Vec<RecordBatch> = reader.map(|b| b.unwrap()).collect();
+        assert_eq!(batches.len(), 1);
+        assert_eq!(batches[0].num_rows(), 3);
+        assert_eq!(batches[0].schema().field(0).name(), "x");
     }
 
     #[test]

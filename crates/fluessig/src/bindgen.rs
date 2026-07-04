@@ -48,7 +48,38 @@ fn is_string_enum(api: &ApiDoc, name: &str) -> bool {
     matches!(name, "FileStatus" | "RefKind" | "PrState" | "IssueState" | "Mergeable")
 }
 
-/// An [`ApiType`] as (rust type, ts type) strings.
+/// Does this type mention the `bytes` scalar anywhere? Gates the per-language
+/// `Bytes` alias in the prelude, so an api with no bytes surface generates
+/// byte-identically to before the alias existed.
+fn mentions_bytes(t: &ApiType) -> bool {
+    match t {
+        ApiType::Scalar(s) => s == "bytes",
+        ApiType::List { list } => mentions_bytes(list),
+        ApiType::Nullable { nullable } => mentions_bytes(nullable),
+        _ => false,
+    }
+}
+
+fn api_uses_bytes(api: &ApiDoc) -> bool {
+    api.interfaces.iter().flat_map(|i| &i.ops).any(|op| {
+        mentions_bytes(&op.returns) || op.params.iter().any(|p| mentions_bytes(&p.ty))
+    })
+}
+
+/// The field carrying an Arrow `RecordBatch`, when this model is an
+/// Arrow-payload DTO (`ChangeBatch.ipc: ArrowBatch`). Such a model is generated
+/// as a class HOLDING the batch (`pub(crate) batch: entl_core::RecordBatch`)
+/// with lazy per-language accessors — an IPC-bytes getter everywhere, plus the
+/// Arrow PyCapsule protocol in Python — so no encoding happens until asked for.
+fn arrow_field(m: &crate::api::ApiModel) -> Option<&crate::api::ApiField> {
+    m.fields.iter().find(|f| matches!(&f.ty, ApiType::Scalar(s) if s == "ArrowBatch"))
+}
+
+/// An [`ApiType`] as (rust type, ts type) strings. `bytes` maps to the `Bytes`
+/// alias each generated prelude defines for its own language (napi `Buffer` /
+/// `Vec<u8>` → python `bytes` / `bytes::Bytes` → ruby binary String), so the
+/// rust spelling is uniform and the shared `binding_core_impls!` macro can use
+/// one name; only napi consumes the ts half.
 fn ty(api: &ApiDoc, t: &ApiType) -> (String, String) {
     match t {
         ApiType::Scalar(s) => match s.as_str() {
@@ -58,6 +89,7 @@ fn ty(api: &ApiDoc, t: &ApiType) -> (String, String) {
             "int64" => ("i64".into(), "number".into()),
             "float64" => ("f64".into(), "number".into()),
             "Json" => ("String".into(), "string".into()), // JSON text payload
+            "bytes" => ("Bytes".into(), "Buffer".into()),
             "void" => ("()".into(), "void".into()),
             _ => ("String".into(), "string".into()),
         },
@@ -156,6 +188,13 @@ pub fn node_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note: 
             fn poll(&self, timeout: Duration) -> Poll<T>;
         }
     };
+    if api_uses_bytes(api) {
+        quote_in! { t =>
+            $['\n']
+            $("/// Bulk bytes cross into JS as a Buffer (Arrow IPC payloads and friends).")
+            pub type Bytes = napi::bindgen_prelude::Buffer;
+        };
+    }
     t.line();
 
     // ── enums (name-only variants → napi enums; wire-valued → strings) ──
@@ -179,6 +218,60 @@ pub fn node_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note: 
 
     // ── DTO structs ──
     for m in &api.models {
+        if let Some(doc) = &m.doc {
+            for line in doc.lines() {
+                quote_in! { t => $['\r']$(format!("/// {line}")) };
+            }
+        }
+        if let Some(af) = arrow_field(m) {
+            // Arrow-payload DTO: a class holding the RecordBatch, getters for the
+            // scalar envelope, and a lazy IPC getter — no encode until accessed.
+            let plain: Vec<&crate::api::ApiField> =
+                m.fields.iter().filter(|f| f.name != af.name).collect();
+            let storage: Vec<rust::Tokens> = plain
+                .iter()
+                .map(|f| {
+                    let (r, _) = ty(api, &f.ty);
+                    let n = snake(&f.name);
+                    quote!(pub(crate) $n: $r,)
+                })
+                .collect();
+            let getters: Vec<rust::Tokens> = plain
+                .iter()
+                .map(|f| {
+                    let (r, _) = ty(api, &f.ty);
+                    let n = snake(&f.name);
+                    quote! {
+                        #[napi(getter)]
+                        pub fn $(&n)(&self) -> $r {
+                            self.$(&n).clone()
+                        }
+                    }
+                })
+                .collect();
+            let ipc = snake(&af.name);
+            quote_in! { t =>
+                $['\r']
+                #[napi]
+                #[derive(Clone)]
+                pub struct $(&m.name) {
+                    $(for f in &storage join ($['\r']) => $f)
+                    $("// the rows, still columnar — encoded only when the getter is hit")
+                    pub(crate) batch: entl_core::RecordBatch,
+                }
+                #[napi]
+                impl $(&m.name) {
+                    $(for g in &getters join ($['\r']) => $g)
+                    $("/// The rows as one Arrow IPC stream — decode with `tableFromIPC` (apache-arrow).")
+                    #[napi(getter, ts_return_type = "Buffer")]
+                    pub fn $(&ipc)(&self) -> Result<Bytes> {
+                        Ok(entl_core::batch_ipc(&self.batch).map_err(err)?.into())
+                    }
+                }
+                $['\n']
+            };
+            continue;
+        }
         let fields: Vec<rust::Tokens> = m
             .fields
             .iter()
@@ -189,11 +282,6 @@ pub fn node_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note: 
                 quote!(pub $n: $r,)
             })
             .collect();
-        if let Some(doc) = &m.doc {
-            for line in doc.lines() {
-                quote_in! { t => $['\r']$(format!("/// {line}")) };
-            }
-        }
         quote_in! { t =>
             $['\r']
             #[napi(object)]
@@ -525,6 +613,92 @@ fn py_op_pieces(api: &ApiDoc, op: &ApiOp) -> (String, String, String, String) {
     (signature, fn_params, prelude, args)
 }
 
+/// The Python projection of an Arrow-payload DTO: a pyclass holding the
+/// `RecordBatch`, envelope getters, a lazy `ipc()` method, and the **Arrow
+/// PyCapsule Interface** (`__arrow_c_schema__` / `__arrow_c_array__`) — the
+/// standard zero-copy C Data Interface handoff. pyarrow/polars/pandas import
+/// the capsules directly (`pa.record_batch(batch)`); entl itself needs no
+/// pyarrow. Capsule ownership follows the standard contract: the capsule owns
+/// the FFI struct; a consumer that imports it marks it released, and an
+/// unconsumed capsule's destructor drops the struct, whose Drop honors release.
+fn emit_py_arrow_model(
+    t: &mut rust::Tokens,
+    api: &ApiDoc,
+    m: &crate::api::ApiModel,
+    af: &crate::api::ApiField,
+) {
+    let plain: Vec<&crate::api::ApiField> = m.fields.iter().filter(|f| f.name != af.name).collect();
+    let storage: Vec<rust::Tokens> = plain
+        .iter()
+        .map(|f| {
+            let (r, _) = ty(api, &f.ty);
+            let n = py_reserved(&snake(&f.name));
+            quote!(pub(crate) $n: $r,)
+        })
+        .collect();
+    let getters: Vec<rust::Tokens> = plain
+        .iter()
+        .map(|f| {
+            let (r, _) = ty(api, &f.ty);
+            let n = py_reserved(&snake(&f.name));
+            quote! {
+                #[getter]
+                fn $(&n)(&self) -> $r {
+                    self.$(&n).clone()
+                }
+            }
+        })
+        .collect();
+    let ipc = py_reserved(&snake(&af.name));
+    if let Some(doc) = &m.doc {
+        for line in doc.lines() {
+            quote_in! { *t => $['\r']$(format!("/// {line}")) };
+        }
+    }
+    quote_in! { *t =>
+        $['\r']
+        #[pyclass]
+        #[derive(Clone)]
+        pub struct $(&m.name) {
+            $(for f in &storage join ($['\r']) => $f)
+            $("// the rows, still columnar — capsule-exported or encoded on demand")
+            pub(crate) batch: entl_core::RecordBatch,
+        }
+        #[pymethods]
+        impl $(&m.name) {
+            $(for g in &getters join ($['\r']) => $g)
+            $("/// The rows as one Arrow IPC stream (`pyarrow.ipc.open_stream`-able) —")
+            $("/// for consumers that want bytes rather than the zero-copy capsules.")
+            fn $(&ipc)(&self) -> PyResult<Bytes> {
+                entl_core::batch_ipc(&self.batch).map_err(err)
+            }
+            $("/// Arrow PyCapsule interface — the schema half of the C Data Interface.")
+            fn __arrow_c_schema__(&self, py: Python<$("'_")>) -> PyResult<Py<pyo3::types::PyCapsule>> {
+                let (_, schema) = entl_core::batch_to_ffi(&self.batch).map_err(err)?;
+                let name = std::ffi::CString::new($(quoted("arrow_schema"))).expect("static cstr");
+                Ok(pyo3::types::PyCapsule::new(py, schema, Some(name))?.unbind())
+            }
+            $("/// Arrow PyCapsule interface — (schema, array) capsules; `pa.record_batch(batch)`")
+            $("/// imports the rows zero-copy. `requested_schema` is accepted and ignored (spec-permitted).")
+            #[pyo3(signature = (requested_schema=None))]
+            fn __arrow_c_array__(
+                &self,
+                py: Python<$("'_")>,
+                requested_schema: Option<Bound<$("'_"), PyAny>>,
+            ) -> PyResult<(Py<pyo3::types::PyCapsule>, Py<pyo3::types::PyCapsule>)> {
+                let _ = requested_schema;
+                let (array, schema) = entl_core::batch_to_ffi(&self.batch).map_err(err)?;
+                let sname = std::ffi::CString::new($(quoted("arrow_schema"))).expect("static cstr");
+                let aname = std::ffi::CString::new($(quoted("arrow_array"))).expect("static cstr");
+                let s = pyo3::types::PyCapsule::new(py, schema, Some(sname))?.unbind();
+                let a = pyo3::types::PyCapsule::new(py, array, Some(aname))?.unbind();
+                Ok((s, a))
+            }
+        }
+        $['\n']
+    };
+}
+
 /// Generate the PyO3 (Python) binding: pyclass DTOs + enums, the core traits,
 /// `#[pyfunction]`s with the GIL released, kwargs-flattened methods, iterator
 /// stream classes, and a `register()` for the `#[pymodule]`.
@@ -551,6 +725,13 @@ pub fn python_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note
             fn poll(&self, timeout: Duration) -> Poll<T>;
         }
     };
+    if api_uses_bytes(api) {
+        quote_in! { t =>
+            $['\n']
+            $("/// Bulk bytes cross into Python as `bytes` (Arrow IPC payloads and friends).")
+            pub type Bytes = Vec<u8>;
+        };
+    }
     t.line();
 
     let mut class_names: Vec<String> = Vec::new();
@@ -577,6 +758,10 @@ pub fn python_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note
     // ── DTO structs (constructible from Python; fields readable via get_all) ──
     for m in &api.models {
         class_names.push(m.name.clone());
+        if let Some(af) = arrow_field(m) {
+            emit_py_arrow_model(&mut t, api, m, af);
+            continue;
+        }
         let fields: Vec<rust::Tokens> = m
             .fields
             .iter()
@@ -993,6 +1178,13 @@ pub fn ruby_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note: 
             fn poll(&self, timeout: Duration) -> Poll<T>;
         }
     };
+    if api_uses_bytes(api) {
+        quote_in! { t =>
+            $['\n']
+            $("/// Bulk bytes cross into Ruby as a binary String (via magnus's `bytes` feature).")
+            pub type Bytes = bytes::Bytes;
+        };
+    }
     t.line();
 
     // ── enums: plain Rust + parse-from-string (Ruby passes lowercase names) ──
@@ -1027,6 +1219,57 @@ pub fn ruby_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note: 
     // ── DTO structs: plain Rust; output models get wrapped Ruby classes + getters ──
     for m in &api.models {
         let is_output = outputs.contains(&m.name);
+        if let Some(doc) = &m.doc {
+            for line in doc.lines() {
+                quote_in! { t => $['\r']$(format!("/// {line}")) };
+            }
+        }
+        if let Some(af) = arrow_field(m) {
+            // Arrow-payload DTO: the wrapped class holds the RecordBatch; the
+            // payload getter encodes to IPC bytes only when called.
+            let plain: Vec<&crate::api::ApiField> =
+                m.fields.iter().filter(|f| f.name != af.name).collect();
+            let storage: Vec<rust::Tokens> = plain
+                .iter()
+                .map(|f| {
+                    let (r, _) = ty(api, &f.ty);
+                    let n = snake(&f.name);
+                    quote!(pub(crate) $n: $r,)
+                })
+                .collect();
+            let getters: Vec<rust::Tokens> = plain
+                .iter()
+                .map(|f| {
+                    let (r, _) = ty(api, &f.ty);
+                    let n = snake(&f.name);
+                    quote! {
+                        fn get_$(&n)(&self) -> $r {
+                            self.$(&n).clone()
+                        }
+                    }
+                })
+                .collect();
+            let ipc = snake(&af.name);
+            quote_in! { t =>
+                $['\r']
+                #[magnus::wrap(class = $(quoted(format!("Entl::{}", m.name))), free_immediately, size)]
+                #[derive(Clone)]
+                pub struct $(&m.name) {
+                    $(for f in &storage join ($['\r']) => $f)
+                    $("// the rows, still columnar — encoded only when the getter is hit")
+                    pub(crate) batch: entl_core::RecordBatch,
+                }
+                impl $(&m.name) {
+                    $(for g in &getters join ($['\r']) => $g)
+                    $("/// The rows as one Arrow IPC stream, as a binary String (red-arrow decodes it).")
+                    fn get_$(&ipc)(&self) -> Result<Bytes, Error> {
+                        Ok(Bytes::from(entl_core::batch_ipc(&self.batch).map_err(rberr)?))
+                    }
+                }
+                $['\n']
+            };
+            continue;
+        }
         let fields: Vec<rust::Tokens> = m
             .fields
             .iter()
@@ -1037,11 +1280,6 @@ pub fn ruby_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note: 
                 quote!(pub $n: $r,)
             })
             .collect();
-        if let Some(doc) = &m.doc {
-            for line in doc.lines() {
-                quote_in! { t => $['\r']$(format!("/// {line}")) };
-            }
-        }
         if is_output {
             let getters: Vec<rust::Tokens> = m
                 .fields
