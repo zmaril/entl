@@ -6,6 +6,10 @@
 //! languages collapses to shapes × languages, and `@manual` stays the escape
 //! hatch for the truly bespoke.
 //!
+//! straitjacket-allow-file:duplication — the per-language generators are
+//! DELIBERATELY parallel: the (language × shape) template grid is the design
+//! (see /translation.md); truly identical pieces (trait emission) are shared.
+//!
 //! The generated file defines the napi surface AND the core traits; the
 //! consumer hand-writes ONE `core_impl` module implementing the traits over its
 //! engine. Generated code references `crate::core_impl::{GitImpl, EntlImpl}` by
@@ -87,6 +91,44 @@ fn param_sig(api: &ApiDoc, op: &ApiOp) -> Vec<(String, String)> {
         .collect()
 }
 
+/// The `<Interface>Core` traits — identical across every language's generated
+/// file (each binding implements them once via `entl_core::binding_core_impls!`).
+fn emit_core_traits(t: &mut rust::Tokens, api: &ApiDoc) {
+    for i in &api.interfaces {
+        let trait_name = format!("{}Core", i.name);
+        let mut methods: Vec<rust::Tokens> = Vec::new();
+        for op in &i.ops {
+            if op.shape == Shape::Manual {
+                continue;
+            }
+            let name = snake(&op.name);
+            let params: Vec<String> =
+                param_sig(api, op).iter().map(|(n, r)| format!("{n}: {r}")).collect();
+            let ps = params.join(", ");
+            let (ret, _) = ty(api, &op.returns);
+            let sig = match op.shape {
+                Shape::Ctor => format!("fn {name}({ps}) -> anyhow::Result<Self>"),
+                Shape::Stream => {
+                    format!("fn {name}(&self, {ps}) -> anyhow::Result<Box<dyn PollStream<{ret}>>>")
+                }
+                _ if i.ops.iter().any(|o| o.shape == Shape::Ctor) => {
+                    format!("fn {name}(&self, {ps}) -> anyhow::Result<{ret}>")
+                }
+                _ => format!("fn {name}({ps}) -> anyhow::Result<{ret}>"),
+            };
+            methods.push(quote!($sig;));
+        }
+        quote_in! { *t =>
+            $['\r']
+            $(format!("/// The `{}` contract — implement over the engine in `crate::core_impl`.", i.name))
+            pub trait $(&trait_name): Sized + Send + Sync + $("'static") {
+                $(for m in &methods join ($['\r']) => $m)
+            }
+            $['\n']
+        };
+    }
+}
+
 /// Generate the napi (Node) binding: DTO structs, enums, core traits, per-op
 /// AsyncTasks, stream classes, free functions, and the handle class.
 pub fn node_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note: Option<&str>) -> String {
@@ -160,40 +202,7 @@ pub fn node_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note: 
         };
     }
 
-    // ── the core traits (implemented once, by hand, in crate::core_impl) ──
-    for i in &api.interfaces {
-        let trait_name = format!("{}Core", i.name);
-        let mut methods: Vec<rust::Tokens> = Vec::new();
-        for op in &i.ops {
-            if op.shape == Shape::Manual {
-                continue;
-            }
-            let name = snake(&op.name);
-            let params: Vec<String> =
-                param_sig(api, op).iter().map(|(n, r)| format!("{n}: {r}")).collect();
-            let ps = params.join(", ");
-            let (ret, _) = ty(api, &op.returns);
-            let sig = match op.shape {
-                Shape::Ctor => format!("fn {name}({ps}) -> anyhow::Result<Self>"),
-                Shape::Stream => {
-                    format!("fn {name}(&self, {ps}) -> anyhow::Result<Box<dyn PollStream<{ret}>>>")
-                }
-                _ if i.ops.iter().any(|o| o.shape == Shape::Ctor) => {
-                    format!("fn {name}(&self, {ps}) -> anyhow::Result<{ret}>")
-                }
-                _ => format!("fn {name}({ps}) -> anyhow::Result<{ret}>"), // stateless interface
-            };
-            methods.push(quote!($sig;));
-        }
-        quote_in! { t =>
-            $['\r']
-            $(format!("/// The `{}` contract — implement over the engine in `crate::core_impl`.", i.name))
-            pub trait $(&trait_name): Sized + Send + Sync + $("'static") {
-                $(for m in &methods join ($['\r']) => $m)
-            }
-            $['\n']
-        };
-    }
+    emit_core_traits(&mut t, api);
 
     // ── per-interface surface ──
     for i in &api.interfaces {
@@ -628,40 +637,7 @@ pub fn python_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note
         };
     }
 
-    // ── the core traits (implemented once, by hand, in crate::core_impl) ──
-    for i in &api.interfaces {
-        let trait_name = format!("{}Core", i.name);
-        let mut methods: Vec<rust::Tokens> = Vec::new();
-        for op in &i.ops {
-            if op.shape == Shape::Manual {
-                continue;
-            }
-            let name = snake(&op.name);
-            let params: Vec<String> =
-                param_sig(api, op).iter().map(|(n, r)| format!("{n}: {r}")).collect();
-            let ps = params.join(", ");
-            let (ret, _) = ty(api, &op.returns);
-            let sig = match op.shape {
-                Shape::Ctor => format!("fn {name}({ps}) -> anyhow::Result<Self>"),
-                Shape::Stream => {
-                    format!("fn {name}(&self, {ps}) -> anyhow::Result<Box<dyn PollStream<{ret}>>>")
-                }
-                _ if i.ops.iter().any(|o| o.shape == Shape::Ctor) => {
-                    format!("fn {name}(&self, {ps}) -> anyhow::Result<{ret}>")
-                }
-                _ => format!("fn {name}({ps}) -> anyhow::Result<{ret}>"),
-            };
-            methods.push(quote!($sig;));
-        }
-        quote_in! { t =>
-            $['\r']
-            $(format!("/// The `{}` contract — implement over the engine in `crate::core_impl`.", i.name))
-            pub trait $(&trait_name): Sized + Send + Sync + $("'static") {
-                $(for m in &methods join ($['\r']) => $m)
-            }
-            $['\n']
-        };
-    }
+    emit_core_traits(&mut t, api);
 
     // ── per-interface surface ──
     for i in &api.interfaces {
@@ -1102,40 +1078,7 @@ pub fn ruby_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note: 
         }
     }
 
-    // ── the core traits ──
-    for i in &api.interfaces {
-        let trait_name = format!("{}Core", i.name);
-        let mut methods: Vec<rust::Tokens> = Vec::new();
-        for op in &i.ops {
-            if op.shape == Shape::Manual {
-                continue;
-            }
-            let name = snake(&op.name);
-            let params: Vec<String> =
-                param_sig(api, op).iter().map(|(n, r)| format!("{n}: {r}")).collect();
-            let ps = params.join(", ");
-            let (ret, _) = ty(api, &op.returns);
-            let sig = match op.shape {
-                Shape::Ctor => format!("fn {name}({ps}) -> anyhow::Result<Self>"),
-                Shape::Stream => {
-                    format!("fn {name}(&self, {ps}) -> anyhow::Result<Box<dyn PollStream<{ret}>>>")
-                }
-                _ if i.ops.iter().any(|o| o.shape == Shape::Ctor) => {
-                    format!("fn {name}(&self, {ps}) -> anyhow::Result<{ret}>")
-                }
-                _ => format!("fn {name}({ps}) -> anyhow::Result<{ret}>"),
-            };
-            methods.push(quote!($sig;));
-        }
-        quote_in! { t =>
-            $['\r']
-            $(format!("/// The `{}` contract — implement over the engine in `crate::core_impl`.", i.name))
-            pub trait $(&trait_name): Sized + Send + Sync + $("'static") {
-                $(for m in &methods join ($['\r']) => $m)
-            }
-            $['\n']
-        };
-    }
+    emit_core_traits(&mut t, api);
 
     // ── the surface ──
     let mut registrations: Vec<String> = Vec::new();
