@@ -2,7 +2,7 @@
 //! into committed per-language binding glue. The thesis (translation.md): every
 //! op has a SHAPE (ctor | unary | stream | manual), and the idiom for each
 //! shape is written ONCE per language as a genco template — AsyncTask→Promise
-//! here (napi), `allow_threads` for PyO3, GVL-plain for Magnus — so N ops × M
+//! here (napi), `detach` for PyO3, GVL-plain for Magnus — so N ops × M
 //! languages collapses to shapes × languages, and `@manual` stays the escape
 //! hatch for the truly bespoke.
 //!
@@ -164,9 +164,12 @@ pub fn node_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note: 
             continue;
         }
         let vs: Vec<String> = variants.iter().map(|v| pascal(v)).collect();
+        // napi 3 no longer auto-derives Clone/Copy on #[napi] enums; option
+        // structs that carry one derive Clone, so the enum must too.
         quote_in! { t =>
             $['\n']
             #[napi]
+            #[derive(Clone, Copy)]
             pub enum $name {
                 $(for v in &vs join ($['\r']) => $v,)
             }
@@ -663,7 +666,7 @@ pub fn python_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note
                         slf
                     }
                     fn __next__(&self, py: Python<$("'_")>) -> Option<$(&item)> {
-                        py.allow_threads(|| loop {
+                        py.detach(|| loop {
                             match self.stream.poll(Duration::from_millis(500)) {
                                 Poll::Item(v) => return Some(v),
                                 Poll::Idle => continue,
@@ -703,7 +706,7 @@ pub fn python_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note
                         fn $(&name)(&self, py: Python<$("'_")>, $(&fn_params)) -> PyResult<$(&ret)> {
                             $prelude
                             let core = self.core.clone();
-                            py.allow_threads(move || core.$(&name)($(&args))).map_err(err)
+                            py.detach(move || core.$(&name)($(&args))).map_err(err)
                         }
                     },
                     Shape::Stream => {
@@ -764,7 +767,7 @@ pub fn python_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note
                     #[pyo3(signature = ($(&signature)))]
                     fn $(&name)(py: Python<$("'_")>, $(&fn_params)) -> PyResult<$(&ret)> {
                         $prelude
-                        py.allow_threads(move || <$(&impl_path) as $(&trait_name)>::$(&name)($(&args))).map_err(err)
+                        py.detach(move || <$(&impl_path) as $(&trait_name)>::$(&name)($(&args))).map_err(err)
                     }
                     $['\n']
                 };

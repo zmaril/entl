@@ -278,40 +278,40 @@ pub trait EntlCore: Sized + Send + Sync + 'static {
 #[pyfunction]
 #[pyo3(signature = (repo_path, base, head, three_dot))]
 fn diff_commits(py: Python<'_>, repo_path: String, base: String, head: String, three_dot: bool) -> PyResult<Vec<FileDiff>> {
-    py.allow_threads(move || <crate::core_impl::GitImpl as GitCore>::diff_commits(repo_path, base, head, three_dot)).map_err(err)
+    py.detach(move || <crate::core_impl::GitImpl as GitCore>::diff_commits(repo_path, base, head, three_dot)).map_err(err)
 }
 
 /// A file's content at a commit — null when absent or binary.
 #[pyfunction]
 #[pyo3(signature = (repo_path, commit, path))]
 fn file_at(py: Python<'_>, repo_path: String, commit: String, path: String) -> PyResult<Option<String>> {
-    py.allow_threads(move || <crate::core_impl::GitImpl as GitCore>::file_at(repo_path, commit, path)).map_err(err)
+    py.detach(move || <crate::core_impl::GitImpl as GitCore>::file_at(repo_path, commit, path)).map_err(err)
 }
 
 #[pyfunction]
 #[pyo3(signature = (repo_path, name))]
 fn branch_exists(py: Python<'_>, repo_path: String, name: String) -> PyResult<bool> {
-    py.allow_threads(move || <crate::core_impl::GitImpl as GitCore>::branch_exists(repo_path, name)).map_err(err)
+    py.detach(move || <crate::core_impl::GitImpl as GitCore>::branch_exists(repo_path, name)).map_err(err)
 }
 
 #[pyfunction]
 #[pyo3(signature = (repo_path))]
 fn current_branch(py: Python<'_>, repo_path: String) -> PyResult<String> {
-    py.allow_threads(move || <crate::core_impl::GitImpl as GitCore>::current_branch(repo_path)).map_err(err)
+    py.detach(move || <crate::core_impl::GitImpl as GitCore>::current_branch(repo_path)).map_err(err)
 }
 
 /// Commit subjects+bodies along a branch (JSON).
 #[pyfunction]
 #[pyo3(signature = (repo_path, branch))]
 fn commit_bodies(py: Python<'_>, repo_path: String, branch: String) -> PyResult<String> {
-    py.allow_threads(move || <crate::core_impl::GitImpl as GitCore>::commit_bodies(repo_path, branch)).map_err(err)
+    py.detach(move || <crate::core_impl::GitImpl as GitCore>::commit_bodies(repo_path, branch)).map_err(err)
 }
 
 /// Remote branch names matching a pattern (trailing-`*` glob). Fetches first.
 #[pyfunction]
 #[pyo3(signature = (repo_path, pattern))]
 fn ls_remote_heads(py: Python<'_>, repo_path: String, pattern: String) -> PyResult<Vec<String>> {
-    py.allow_threads(move || <crate::core_impl::GitImpl as GitCore>::ls_remote_heads(repo_path, pattern)).map_err(err)
+    py.detach(move || <crate::core_impl::GitImpl as GitCore>::ls_remote_heads(repo_path, pattern)).map_err(err)
 }
 
 /// Poll-based stream from `Entl.changes`, dressed as a Python iterator.
@@ -325,7 +325,7 @@ impl Changes {
         slf
     }
     fn __next__(&self, py: Python<'_>) -> Option<ChangeBatch> {
-        py.allow_threads(|| loop {
+        py.detach(|| loop {
             match self.stream.poll(Duration::from_millis(500)) {
                 Poll::Item(v) => return Some(v),
                 Poll::Idle => continue,
@@ -346,7 +346,7 @@ impl DriverPlan {
         slf
     }
     fn __next__(&self, py: Python<'_>) -> Option<Statement> {
-        py.allow_threads(|| loop {
+        py.detach(|| loop {
             match self.stream.poll(Duration::from_millis(500)) {
                 Poll::Item(v) => return Some(v),
                 Poll::Idle => continue,
@@ -374,19 +374,19 @@ impl Entl {
     #[pyo3(signature = (repo_path))]
     fn load_git(&self, py: Python<'_>, repo_path: String) -> PyResult<GitStats> {
         let core = self.core.clone();
-        py.allow_threads(move || core.load_git(repo_path)).map_err(err)
+        py.detach(move || core.load_git(repo_path)).map_err(err)
     }
     /// Load GitHub data (events/PRs/issues/Actions). Needs a token.
     #[pyo3(signature = (repo_path))]
     fn load_github(&self, py: Python<'_>, repo_path: String) -> PyResult<GithubStats> {
         let core = self.core.clone();
-        py.allow_threads(move || core.load_github(repo_path)).map_err(err)
+        py.detach(move || core.load_github(repo_path)).map_err(err)
     }
     /// Run a SQL query; JSON rows back.
     #[pyo3(signature = (sql))]
     fn query(&self, py: Python<'_>, sql: String) -> PyResult<String> {
         let core = self.core.clone();
-        py.allow_threads(move || core.query(sql)).map_err(err)
+        py.detach(move || core.query(sql)).map_err(err)
     }
     /// Pull `repoPath` and sync it into a target store, in one call.
     #[pyo3(signature = (repo_path, target, path=None, github=None, tables=None, exclude=None, rename=None, schema=None, objects=None))]
@@ -394,7 +394,7 @@ impl Entl {
         let sink_options_arg = SinkOptions { target, path, github, tables, exclude, rename, schema, objects };
 
         let core = self.core.clone();
-        py.allow_threads(move || core.sink(repo_path, sink_options_arg)).map_err(err)
+        py.detach(move || core.sink(repo_path, sink_options_arg)).map_err(err)
     }
     /// Read a store back into canonical rows (JSON; oids hex, timestamps RFC3339).
     #[pyo3(signature = (source, path, tables=None, schema=None))]
@@ -402,7 +402,7 @@ impl Entl {
         let extract_options_arg = ExtractOptions { source, path, tables, schema };
 
         let core = self.core.clone();
-        py.allow_threads(move || core.extract(extract_options_arg)).map_err(err)
+        py.detach(move || core.extract(extract_options_arg)).map_err(err)
     }
     /// Stream the change batches from one pull (the stream plane).
     #[pyo3(signature = (repo_path, github=None, objects=None))]
@@ -424,7 +424,7 @@ impl Entl {
         let rebuild_options_arg = RebuildOptions { source, dest, out, schema };
 
         let core = self.core.clone();
-        py.allow_threads(move || core.rebuild(rebuild_options_arg)).map_err(err)
+        py.detach(move || core.rebuild(rebuild_options_arg)).map_err(err)
     }
     // @manual: watch — hand-written in lib.rs if this binding offers it.
 }

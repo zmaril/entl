@@ -28,6 +28,7 @@ pub trait PollStream<T>: Send + Sync {
 }
 
 #[napi]
+#[derive(Clone, Copy)]
 pub enum SinkTarget {
     Sqlite,
     Jsonl,
