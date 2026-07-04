@@ -748,16 +748,22 @@ mod tests {
         assert!(out.status.success(), "git {args:?} failed");
     }
 
-    /// End-to-end: ingest a real (tiny) repo and drain its changes off `poll`.
-    #[test]
-    fn ingest_streams_change_batches_to_poll() {
-        let dir = std::env::temp_dir().join(format!("entl-stream-{}", std::process::id()));
+    /// A throwaway one-commit repo (`a.txt` = "hello\n", message "first").
+    fn fixture_repo(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("entl-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         git(&dir, &["init", "-q"]);
         std::fs::write(dir.join("a.txt"), "hello\n").unwrap();
         git(&dir, &["add", "."]);
         git(&dir, &["commit", "-qm", "first"]);
+        dir
+    }
+
+    /// End-to-end: ingest a real (tiny) repo and drain its changes off `poll`.
+    #[test]
+    fn ingest_streams_change_batches_to_poll() {
+        let dir = fixture_repo("stream");
         std::fs::write(dir.join("a.txt"), "hello\nworld\n").unwrap();
         git(&dir, &["add", "."]);
         git(&dir, &["commit", "-qm", "second"]);
@@ -794,13 +800,7 @@ mod tests {
     /// from the notes tree, note text intact — and re-sync replaces cleanly.
     #[test]
     fn ingest_captures_git_notes() {
-        let dir = std::env::temp_dir().join(format!("entl-notes-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        git(&dir, &["init", "-q"]);
-        std::fs::write(dir.join("a.txt"), "hello\n").unwrap();
-        git(&dir, &["add", "."]);
-        git(&dir, &["commit", "-qm", "first"]);
+        let dir = fixture_repo("notes");
         git(&dir, &["notes", "add", "-m", "reviewed: looks good"]);
         git(&dir, &["notes", "--ref", "refs/notes/pm", "add", "-m", "pm-state: shipped"]);
 
