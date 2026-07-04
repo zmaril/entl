@@ -12,6 +12,11 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # the testkit property tests create real commits; give every job a git identity
+  GIT_AUTHOR_NAME: ci
+  GIT_AUTHOR_EMAIL: ci@example.com
+  GIT_COMMITTER_NAME: ci
+  GIT_COMMITTER_EMAIL: ci@example.com
 
 jobs:
   rust:
@@ -26,11 +31,6 @@ jobs:
       - run: cargo test
       # the round-trip property tests (P1 store, P2 OID-exact, P3 forge)
       - run: cargo test -p entl-testkit
-        env:
-          GIT_AUTHOR_NAME: ci
-          GIT_AUTHOR_EMAIL: ci@example.com
-          GIT_COMMITTER_NAME: ci
-          GIT_COMMITTER_EMAIL: ci@example.com
 
   node:
     name: node binding + codegen freshness
@@ -125,10 +125,6 @@ jobs:
       - run: cargo test -p entl-testkit
         env:
           ENTL_TEST_PG: postgres://postgres:pg@localhost:5432/entl
-          GIT_AUTHOR_NAME: ci
-          GIT_AUTHOR_EMAIL: ci@example.com
-          GIT_COMMITTER_NAME: ci
-          GIT_COMMITTER_EMAIL: ci@example.com
 
   docs:
     name: executable docs (cookbook blocks)
