@@ -1,0 +1,83 @@
+# entl CI: the Rust engine + fluessig, the node and python bindings against their
+# suites, and the codegen-freshness gate (every generated artifact must match a
+# fresh regeneration — stale codegen is a build failure, not a surprise).
+#
+# Not here yet (follow-ups in todo.txt): the ruby binding (needs a ruby/libclang
+# toolchain on the runner), the executable-docs harness (needs the release CLI +
+# the addon + the venv together), Postgres-gated tests (ENTL_TEST_PG).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: rust (core + cli + fluessig + testkit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # default members: entl-core, entl-cli, fluessig (incl. the drift guards
+      # over every committed generated artifact)
+      - run: cargo test
+      # the round-trip property tests (P1 store, P2 OID-exact, P3 forge)
+      - run: cargo test -p entl-testkit
+        env:
+          GIT_AUTHOR_NAME: ci
+          GIT_AUTHOR_EMAIL: ci@example.com
+          GIT_COMMITTER_NAME: ci
+          GIT_COMMITTER_EMAIL: ci@example.com
+
+  node:
+    name: node binding + codegen freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: build the napi addon
+        working-directory: crates/entl-node
+        run: |
+          bun install
+          bun run build
+      - name: bun test (PGlite e2e + coverage)
+        working-directory: crates/entl-node
+        run: bun test
+      - name: codegen freshness — regenerate everything, fail on drift
+        run: |
+          (cd crates/fluessig/emitter && npm install && node emit.mjs ../entl.tsp)
+          (cd crates/entl-node && bun run gen)
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::generated artifacts are stale — run the regen chain and commit (see crates/fluessig/plan.txt)"
+            git status --porcelain
+            git diff | head -200
+            exit 1
+          fi
+
+  python:
+    name: python binding
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: build + test
+        working-directory: crates/entl-python
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --quiet maturin pytest sqlalchemy
+          .venv/bin/maturin develop --quiet
+          .venv/bin/python -m pytest tests/ -q
