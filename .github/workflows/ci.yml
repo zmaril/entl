@@ -51,6 +51,9 @@ jobs:
               - 'site/examples.test.ts'
               - 'site/content/docs/guides/cookbook.mdx'
               - '.github/workflows/ci.yml'
+              # the docs job builds the CLI + bindings, so it depends on the
+              # shared toolchain/cache setup too (rust-setup lives here)
+              - '.github/actions/**'
 
   rust:
     name: rust (core + cli + fluessig + testkit)
