@@ -532,16 +532,29 @@ async fn ingest_async(
     let mut labels: Labels = HashMap::new();
     let api = format!("{base}/repos/{owner}/{name}");
 
+    // Does the repos row still lack forge identity? True when the row exists with
+    // owner NULL — and when the row doesn't exist yet (a git-less sync ordering:
+    // loadGithub before the first loadGit), so the enrich retries until it lands.
+    let needs_meta: bool = db
+        .conn
+        .query_row("SELECT owner IS NULL FROM repos WHERE id = ?", params![repo_id], |r| r.get(0))
+        .unwrap_or(true);
+
     // Top-level signal: poll the event feed (also stored as an activity log). A 304
     // means the repo is idle → skip all per-resource syncs for free.
     let active = events::sync_events(db, &client, &base, owner, name, repo_id, &mut stats).await?;
     if !active {
+        // Idle, but the repos row was never enriched (e.g. the first active sync
+        // ran before the git side created the row) — do the one metadata GET now.
+        if needs_meta {
+            sync_repo_meta(db, &client, owner, name, repo_id).await;
+        }
         return Ok(stats);
     }
 
     // Repo metadata (default branch, homepage) — one cheap GET, best-effort:
-    // enriches the git-side `repos` row with forge identity. Only on active
-    // syncs, so idle polls stay one conditional request.
+    // enriches the git-side `repos` row with forge identity. Refreshed on every
+    // active sync, so renames/homepage edits eventually land.
     sync_repo_meta(db, &client, owner, name, repo_id).await;
 
     // Each resource is gated by a cheap conditional REST probe (free on 304), then
