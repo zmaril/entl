@@ -1517,6 +1517,44 @@
       },
       {
         "def": null,
+        "desc": "full notes ref name, e.g. `refs/notes/commits`",
+        "name": "notes_ref",
+        "notNull": true,
+        "pk": true,
+        "type": "text"
+      },
+      {
+        "def": null,
+        "desc": "the object the note annotates (usually a commit)",
+        "name": "annotated_oid",
+        "notNull": true,
+        "pk": true,
+        "type": "blob"
+      },
+      {
+        "def": null,
+        "desc": null,
+        "name": "note",
+        "notNull": true,
+        "pk": false,
+        "type": "text"
+      }
+    ],
+    "desc": "A git note (`refs/notes/*`): free-form text attached to any object after the\nfact, without rewriting it. Mutable per-repo state like refs — each sync\nreplaces the repo's rows. The default ref is `refs/notes/commits`; other\nnamespaces ride the notesRef column.",
+    "name": "git_notes"
+  },
+  {
+    "cols": [
+      {
+        "def": null,
+        "desc": null,
+        "name": "repo_id",
+        "notNull": true,
+        "pk": true,
+        "type": "text"
+      },
+      {
+        "def": null,
         "desc": "short ref name, e.g. `main` or `origin/main`",
         "name": "name",
         "notNull": true,
@@ -1611,8 +1649,16 @@
       },
       {
         "def": null,
-        "desc": null,
+        "desc": "from the forge (`repos/{o}/{r}`), when a GitHub sync has run",
         "name": "default_branch",
+        "notNull": false,
+        "pk": false,
+        "type": "text"
+      },
+      {
+        "def": null,
+        "desc": "the repo's homepage URL from the forge, when set",
+        "name": "homepage_url",
         "notNull": false,
         "pk": false,
         "type": "text"

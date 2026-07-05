@@ -245,8 +245,8 @@ mod tests {
         assert_eq!(table_schema("commits").unwrap().pk, ["oid"]);
         assert_eq!(table_schema("commit_parents").unwrap().pk, ["commit_oid", "idx"]);
         assert_eq!(table_schema("gh_pull_requests").unwrap().pk, ["repo_id", "number"]);
-        // and the backfill set is catalog-driven (all 28 physical tables)
-        assert_eq!(driver_tables().len(), 28);
+        // and the backfill set is catalog-driven (all 29 physical tables)
+        assert_eq!(driver_tables().len(), 29);
     }
 
     #[test]

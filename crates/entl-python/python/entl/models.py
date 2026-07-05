@@ -46,6 +46,7 @@ ENTL_TABLES = [
     "gh_users",
     "gh_workflow_runs",
     "gh_workflows",
+    "git_notes",
     "refs",
     "repos",
     "sync_state",
@@ -293,6 +294,13 @@ class GhWorkflows(Base):
     path = Column(String)
     state = Column(String)
 
+class GitNotes(Base):
+    __tablename__ = "git_notes"
+    repo_id = Column(String, primary_key=True)
+    notes_ref = Column(String, primary_key=True)
+    annotated_oid = Column(String, primary_key=True)
+    note = Column(String, nullable=False)
+
 class Refs(Base):
     __tablename__ = "refs"
     repo_id = Column(String, primary_key=True)
@@ -311,6 +319,7 @@ class Repos(Base):
     owner = Column(String)
     name = Column(String)
     default_branch = Column(String)
+    homepage_url = Column(String)
     first_synced_at = Column(String)
     last_synced_at = Column(String)
 

@@ -75,9 +75,36 @@ model Repo {
   host?: string;
   owner?: string;
   name?: string;
+  /** from the forge (`repos/{o}/{r}`), when a GitHub sync has run */
   defaultBranch?: string;
+
+  /** the repo's homepage URL from the forge, when set */
+  homepageUrl?: string;
+
   firstSyncedAt?: utcDateTime;
   lastSyncedAt?: utcDateTime;
+}
+
+/**
+ * A git note (`refs/notes/*`): free-form text attached to any object after the
+ * fact, without rewriting it. Mutable per-repo state like refs — each sync
+ * replaces the repo's rows. The default ref is `refs/notes/commits`; other
+ * namespaces ride the notesRef column.
+ */
+@entity
+@name("git_notes")
+model GitNote {
+  @key
+  @fk(#["repo_id"])
+  repo: Repo;
+
+  /** full notes ref name, e.g. `refs/notes/commits` */
+  @key notesRef: string;
+
+  /** the object the note annotates (usually a commit) */
+  @key annotatedOid: Oid;
+
+  note: string;
 }
 
 /**

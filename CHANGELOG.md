@@ -4,6 +4,11 @@ Notable changes to this project, newest first, by date.
 
 ## 2026-07-04
 
+- **git notes + forge repo metadata**: new `git_notes` table (every `refs/notes/*` ref,
+  bulk-replaced per sync like refs, streamed to sinks), and the `repos` row now gets
+  `owner`/`name`/`host`/`default_branch`/`homepage_url` from GitHub on active syncs
+  (new `homepage_url` column). Also fixed: rebuilding an existing store across a schema
+  change no longer trips on the `oid()` macro (extras.sql is now fully idempotent).
 - **Arrow handoff**: the change stream crosses the binding boundary columnar instead of as
   JSON strings. `ChangeBatch` now holds the Arrow `RecordBatch`: `ipc` yields it as one
   Arrow IPC stream everywhere, and the Python class speaks the Arrow PyCapsule interface

@@ -274,6 +274,14 @@ pub const PG_TABLES: &[TableSchema] = &[
   "state" text
 );
 "# },
+    TableSchema { name: "git_notes", pk: &["repo_id", "notes_ref", "annotated_oid"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+  "repo_id" text NOT NULL,
+  "notes_ref" text NOT NULL,
+  "annotated_oid" text NOT NULL,
+  "note" text NOT NULL,
+  PRIMARY KEY ("repo_id", "notes_ref", "annotated_oid")
+);
+"# },
     TableSchema { name: "refs", pk: &["repo_id", "name"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "name" text NOT NULL,
@@ -292,6 +300,7 @@ pub const PG_TABLES: &[TableSchema] = &[
   "owner" text,
   "name" text,
   "default_branch" text,
+  "homepage_url" text,
   "first_synced_at" timestamptz,
   "last_synced_at" timestamptz
 );
@@ -576,6 +585,14 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "state" text
 );
 "# },
+    TableSchema { name: "git_notes", pk: &["repo_id", "notes_ref", "annotated_oid"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+  "repo_id" text NOT NULL,
+  "notes_ref" text NOT NULL,
+  "annotated_oid" text NOT NULL,
+  "note" text NOT NULL,
+  PRIMARY KEY ("repo_id", "notes_ref", "annotated_oid")
+);
+"# },
     TableSchema { name: "refs", pk: &["repo_id", "name"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "name" text NOT NULL,
@@ -594,6 +611,7 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "owner" text,
   "name" text,
   "default_branch" text,
+  "homepage_url" text,
   "first_synced_at" text,
   "last_synced_at" text
 );
@@ -878,6 +896,14 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "state" text
 );
 "# },
+    TableSchema { name: "git_notes", pk: &["repo_id", "notes_ref", "annotated_oid"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+  "repo_id" text NOT NULL,
+  "notes_ref" text NOT NULL,
+  "annotated_oid" blob NOT NULL,
+  "note" text NOT NULL,
+  PRIMARY KEY ("repo_id", "notes_ref", "annotated_oid")
+);
+"# },
     TableSchema { name: "refs", pk: &["repo_id", "name"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "name" text NOT NULL,
@@ -896,6 +922,7 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "owner" text,
   "name" text,
   "default_branch" text,
+  "homepage_url" text,
   "first_synced_at" timestamp,
   "last_synced_at" timestamp
 );
