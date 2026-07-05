@@ -3,6 +3,15 @@
 # regeneration — stale codegen is a build failure, not a surprise), the Postgres
 # leg of the testkit round-trips, and the executable-docs harness (every code
 # block in the cookbook runs against a fixture repo).
+#
+# Path gating (the `changes` job below): docs-site edits don't touch the engine
+# or the bindings, so a site-only PR skips the whole heavy matrix. The one
+# exception is the executable-docs job — it runs the cookbook's code blocks, so
+# it fires on engine changes AND on cookbook/example edits.
+#
+# straitjacket-allow-file:duplication — GitHub Actions has no include for job
+# scaffolding, so the per-job checkout + rust-setup + `needs`/`if` path guard
+# repeats across the matrix by design.
 name: CI
 
 on:
@@ -14,8 +23,39 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Decide which job families need to run for this diff. `code` = anything that
+  # isn't the docs site, design notes, or loose markdown. `docs` = whatever the
+  # executable-docs harness depends on (the engine/bindings it exercises, plus
+  # the cookbook and the test file itself).
+  changes:
+    name: detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - '**'
+              - '!site/**'
+              - '!notes/**'
+              - '!**/*.md'
+            docs:
+              - 'crates/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'site/examples.test.ts'
+              - 'site/content/docs/guides/cookbook.mdx'
+              - '.github/workflows/ci.yml'
+
   rust:
     name: rust (core + cli + fluessig + testkit)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,6 +68,8 @@ jobs:
 
   node:
     name: node binding + codegen freshness
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -57,6 +99,8 @@ jobs:
 
   python:
     name: python binding
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -76,6 +120,8 @@ jobs:
 
   ruby:
     name: ruby binding
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -104,6 +150,8 @@ jobs:
 
   postgres:
     name: postgres sink (testkit round-trips)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -129,6 +177,8 @@ jobs:
 
   docs:
     name: executable docs (cookbook blocks)
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

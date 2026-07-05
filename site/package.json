@@ -6,6 +6,7 @@
     "gen": "bun run scripts/gen-reference.ts",
     "prebuild": "bun run scripts/gen-reference.ts",
     "build": "next build",
+    "deploy": "next build && wrangler deploy",
     "dev": "next dev",
     "start": "serve out",
     "types:check": "fumadocs-mdx && next typegen && tsc --noEmit",
