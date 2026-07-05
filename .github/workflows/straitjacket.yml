@@ -15,4 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: zmaril/straitjacket@main
+      # Pinned, not @main/latest: a new straitjacket rule reaches this repo only
+      # on a deliberate bump, not the moment it ships.
+      - uses: zmaril/straitjacket@v0.2.3
+        with:
+          version: v0.2.3
