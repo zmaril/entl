@@ -4,4 +4,11 @@ runs:
   using: composite
   steps:
     - uses: dtolnay/rust-toolchain@stable
+    # One shared cache key across every CI job (rather than rust-cache's default
+    # per-job key). The bundled-DuckDB dependency compile (~3 min) is identical
+    # in all jobs, so a single shared cache means they restore it warm instead of
+    # each rebuilding it — and it stays under the 10 GB repo cache limit that six
+    # near-identical per-job caches would blow past and evict each other from.
     - uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: ci
