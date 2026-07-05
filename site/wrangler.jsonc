@@ -1,0 +1,22 @@
+{
+  // Cloudflare Workers Static Assets config for the entl docs site.
+  //
+  // The site is a Next.js *static export* (next.config.mjs: output: 'export'),
+  // so `bun run build` emits a plain static site into ./out. `wrangler deploy`
+  // uploads that directory as Worker Assets — there is NO server-side runtime.
+  //
+  // This file MUST be committed: without it, Cloudflare's Workers build detects
+  // Next.js and falls back to the OpenNext (SSR) adapter, which fails on a static
+  // export (`.next/standalone` never exists). An explicit assets config short-
+  // circuits that detection.
+  //
+  // Dashboard settings: Build command `bun run build`, Deploy command
+  // `npx wrangler deploy`, Root directory `/site`.
+  "name": "entl",
+  "compatibility_date": "2026-07-01",
+  "assets": {
+    "directory": "./out",
+    // Serve out/404.html for unknown paths (static export writes real .html per route).
+    "not_found_handling": "404-page"
+  }
+}
