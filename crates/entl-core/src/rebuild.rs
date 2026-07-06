@@ -42,12 +42,15 @@ pub fn rebuild_from_snapshot(snap: &Snapshot, repo: &Path) -> Result<Vec<String>
     // tree oid(hex) → ordered entries.
     let mut tree_entries: HashMap<String, Vec<(String, String, String, String)>> = HashMap::new();
     for r in get("tree_entries") {
-        tree_entries.entry(s(r, "tree_oid").to_string()).or_default().push((
-            s(r, "name").to_string(),
-            s(r, "mode").to_string(),
-            s(r, "entry_type").to_string(),
-            s(r, "child_oid").to_string(),
-        ));
+        tree_entries
+            .entry(s(r, "tree_oid").to_string())
+            .or_default()
+            .push((
+                s(r, "name").to_string(),
+                s(r, "mode").to_string(),
+                s(r, "entry_type").to_string(),
+                s(r, "child_oid").to_string(),
+            ));
     }
 
     // parents by commit oid, in idx order.
@@ -75,7 +78,10 @@ pub fn rebuild_from_snapshot(snap: &Snapshot, repo: &Path) -> Result<Vec<String>
     let mut commits: Vec<C> = Vec::new();
     for r in get("commits") {
         let oid = s(r, "oid").to_string();
-        let par = parents.get(&oid).map(|v| v.iter().map(|(_, p)| p.clone()).collect()).unwrap_or_default();
+        let par = parents
+            .get(&oid)
+            .map(|v| v.iter().map(|(_, p)| p.clone()).collect())
+            .unwrap_or_default();
         commits.push(C {
             tree_oid: s(r, "tree_oid").to_string(),
             author: sig(r, "author"),
@@ -90,8 +96,20 @@ pub fn rebuild_from_snapshot(snap: &Snapshot, repo: &Path) -> Result<Vec<String>
     }
 
     // Topological order (Kahn): a commit is ready once all its parents are emitted.
-    let idx_by_oid: HashMap<&str, usize> = commits.iter().enumerate().map(|(i, c)| (c.oid.as_str(), i)).collect();
-    let mut indeg: Vec<usize> = commits.iter().map(|c| c.parents.iter().filter(|p| idx_by_oid.contains_key(p.as_str())).count()).collect();
+    let idx_by_oid: HashMap<&str, usize> = commits
+        .iter()
+        .enumerate()
+        .map(|(i, c)| (c.oid.as_str(), i))
+        .collect();
+    let mut indeg: Vec<usize> = commits
+        .iter()
+        .map(|c| {
+            c.parents
+                .iter()
+                .filter(|p| idx_by_oid.contains_key(p.as_str()))
+                .count()
+        })
+        .collect();
     let mut children: Vec<Vec<usize>> = vec![Vec::new(); commits.len()];
     for (i, c) in commits.iter().enumerate() {
         for p in &c.parents {
@@ -115,7 +133,11 @@ pub fn rebuild_from_snapshot(snap: &Snapshot, repo: &Path) -> Result<Vec<String>
         bail!("commit graph has a cycle or missing parents");
     }
     // position in the fast-import stream (index) for each commit oid.
-    let pos: HashMap<&str, usize> = order.iter().enumerate().map(|(pos, &i)| (commits[i].oid.as_str(), pos)).collect();
+    let pos: HashMap<&str, usize> = order
+        .iter()
+        .enumerate()
+        .map(|(pos, &i)| (commits[i].oid.as_str(), pos))
+        .collect();
 
     // Build the fast-import commits in topo order.
     let mut snap_commits = Vec::with_capacity(order.len());
@@ -124,7 +146,11 @@ pub fn rebuild_from_snapshot(snap: &Snapshot, repo: &Path) -> Result<Vec<String>
         let mut tree = Vec::new();
         expand_tree(&c.tree_oid, "", &tree_entries, &blobs, &mut tree)
             .with_context(|| format!("expand tree for commit {}", c.oid))?;
-        let parents = c.parents.iter().filter_map(|p| pos.get(p.as_str()).copied()).collect();
+        let parents = c
+            .parents
+            .iter()
+            .filter_map(|p| pos.get(p.as_str()).copied())
+            .collect();
         snap_commits.push(SnapCommit {
             parents,
             tree,
@@ -179,7 +205,11 @@ fn expand_tree(
         return Ok(()); // empty tree (or absent)
     };
     for (name, mode, etype, child) in children {
-        let path = if prefix.is_empty() { name.clone() } else { format!("{prefix}/{name}") };
+        let path = if prefix.is_empty() {
+            name.clone()
+        } else {
+            format!("{prefix}/{name}")
+        };
         match etype.as_str() {
             "tree" => expand_tree(child, &path, entries, blobs, out)?,
             "commit" => {} // gitlink/submodule — no content to write
@@ -217,7 +247,12 @@ pub fn rebuild_from_store(
 
 /// Rebuild a repo from any store named by string: `duckdb` | `sqlite` | `jsonl` | `postgres`.
 /// The shared entry for the CLI and the language bindings.
-pub fn rebuild_store(from: &str, dest: &str, schema: Option<&str>, out: &Path) -> Result<Vec<String>> {
+pub fn rebuild_store(
+    from: &str,
+    dest: &str,
+    schema: Option<&str>,
+    out: &Path,
+) -> Result<Vec<String>> {
     if from == "duckdb" {
         let d = crate::db::Db::open(dest)?;
         let snap = crate::extract::extract_duckdb(&d.conn, GIT_FULL_TABLES)?;

@@ -3,10 +3,10 @@
 //! straitjacket-allow-file:duplication — generated code repeats by design.
 #![allow(clippy::all)]
 
-use std::sync::Arc;
-use std::time::Duration;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
+use std::sync::Arc;
+use std::time::Duration;
 
 fn err(e: impl std::fmt::Display) -> PyErr {
     PyRuntimeError::new_err(e.to_string())
@@ -48,7 +48,11 @@ impl GitStats {
     #[new]
     #[pyo3(signature = (new_commits, file_changes, refs))]
     fn new(new_commits: i64, file_changes: i64, refs: i64) -> Self {
-        Self { new_commits, file_changes, refs }
+        Self {
+            new_commits,
+            file_changes,
+            refs,
+        }
     }
 }
 
@@ -70,8 +74,28 @@ pub struct GithubStats {
 impl GithubStats {
     #[new]
     #[pyo3(signature = (events, pull_requests, reviews, review_comments, issues, comments, workflow_runs, check_runs, users))]
-    fn new(events: i64, pull_requests: i64, reviews: i64, review_comments: i64, issues: i64, comments: i64, workflow_runs: i64, check_runs: i64, users: i64) -> Self {
-        Self { events, pull_requests, reviews, review_comments, issues, comments, workflow_runs, check_runs, users }
+    fn new(
+        events: i64,
+        pull_requests: i64,
+        reviews: i64,
+        review_comments: i64,
+        issues: i64,
+        comments: i64,
+        workflow_runs: i64,
+        check_runs: i64,
+        users: i64,
+    ) -> Self {
+        Self {
+            events,
+            pull_requests,
+            reviews,
+            review_comments,
+            issues,
+            comments,
+            workflow_runs,
+            check_runs,
+            users,
+        }
     }
 }
 
@@ -93,8 +117,28 @@ pub struct SinkStats {
 impl SinkStats {
     #[new]
     #[pyo3(signature = (new_commits, file_changes, refs, pull_requests, issues, events, workflow_runs, check_runs, rows))]
-    fn new(new_commits: i64, file_changes: i64, refs: i64, pull_requests: i64, issues: i64, events: i64, workflow_runs: i64, check_runs: i64, rows: i64) -> Self {
-        Self { new_commits, file_changes, refs, pull_requests, issues, events, workflow_runs, check_runs, rows }
+    fn new(
+        new_commits: i64,
+        file_changes: i64,
+        refs: i64,
+        pull_requests: i64,
+        issues: i64,
+        events: i64,
+        workflow_runs: i64,
+        check_runs: i64,
+        rows: i64,
+    ) -> Self {
+        Self {
+            new_commits,
+            file_changes,
+            refs,
+            pull_requests,
+            issues,
+            events,
+            workflow_runs,
+            check_runs,
+            rows,
+        }
     }
 }
 
@@ -113,8 +157,22 @@ pub struct FileDiff {
 impl FileDiff {
     #[new]
     #[pyo3(signature = (path, status, additions, deletions, patch, old_path=None))]
-    fn new(path: String, status: String, additions: i64, deletions: i64, patch: String, old_path: Option<String>) -> Self {
-        Self { path, status, additions, deletions, patch, old_path }
+    fn new(
+        path: String,
+        status: String,
+        additions: i64,
+        deletions: i64,
+        patch: String,
+        old_path: Option<String>,
+    ) -> Self {
+        Self {
+            path,
+            status,
+            additions,
+            deletions,
+            patch,
+            old_path,
+        }
     }
 }
 
@@ -219,8 +277,26 @@ pub struct SinkOptions {
 impl SinkOptions {
     #[new]
     #[pyo3(signature = (target, path=None, github=None, tables=None, exclude=None, rename=None, schema=None, objects=None))]
-    fn new(target: SinkTarget, path: Option<String>, github: Option<bool>, tables: Option<Vec<String>>, exclude: Option<Vec<String>>, rename: Option<Vec<TableRename>>, schema: Option<String>, objects: Option<bool>) -> Self {
-        Self { target, path, github, tables, exclude, rename, schema, objects }
+    fn new(
+        target: SinkTarget,
+        path: Option<String>,
+        github: Option<bool>,
+        tables: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+        rename: Option<Vec<TableRename>>,
+        schema: Option<String>,
+        objects: Option<bool>,
+    ) -> Self {
+        Self {
+            target,
+            path,
+            github,
+            tables,
+            exclude,
+            rename,
+            schema,
+            objects,
+        }
     }
 }
 
@@ -236,8 +312,18 @@ pub struct ExtractOptions {
 impl ExtractOptions {
     #[new]
     #[pyo3(signature = (source, path, tables=None, schema=None))]
-    fn new(source: String, path: String, tables: Option<Vec<String>>, schema: Option<String>) -> Self {
-        Self { source, path, tables, schema }
+    fn new(
+        source: String,
+        path: String,
+        tables: Option<Vec<String>>,
+        schema: Option<String>,
+    ) -> Self {
+        Self {
+            source,
+            path,
+            tables,
+            schema,
+        }
     }
 }
 
@@ -254,7 +340,12 @@ impl RebuildOptions {
     #[new]
     #[pyo3(signature = (source, dest, out, schema=None))]
     fn new(source: String, dest: String, out: String, schema: Option<String>) -> Self {
-        Self { source, dest, out, schema }
+        Self {
+            source,
+            dest,
+            out,
+            schema,
+        }
     }
 }
 
@@ -285,14 +376,29 @@ pub struct DriverPlanOptions {
 impl DriverPlanOptions {
     #[new]
     #[pyo3(signature = (tables=None, exclude=None, rename=None, schema=None))]
-    fn new(tables: Option<Vec<String>>, exclude: Option<Vec<String>>, rename: Option<Vec<TableRename>>, schema: Option<String>) -> Self {
-        Self { tables, exclude, rename, schema }
+    fn new(
+        tables: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+        rename: Option<Vec<TableRename>>,
+        schema: Option<String>,
+    ) -> Self {
+        Self {
+            tables,
+            exclude,
+            rename,
+            schema,
+        }
     }
 }
 
 /// The `Git` contract — implement over the engine in `crate::core_impl`.
 pub trait GitCore: Sized + Send + Sync + 'static {
-    fn diff_commits(repo_path: String, base: String, head: String, three_dot: bool) -> anyhow::Result<Vec<FileDiff>>;
+    fn diff_commits(
+        repo_path: String,
+        base: String,
+        head: String,
+        three_dot: bool,
+    ) -> anyhow::Result<Vec<FileDiff>>;
     fn file_at(repo_path: String, commit: String, path: String) -> anyhow::Result<Option<String>>;
     fn branch_exists(repo_path: String, name: String) -> anyhow::Result<bool>;
     fn current_branch(repo_path: String) -> anyhow::Result<String>;
@@ -309,49 +415,75 @@ pub trait EntlCore: Sized + Send + Sync + 'static {
     fn query_arrow(&self, sql: String) -> anyhow::Result<Bytes>;
     fn sink(&self, repo_path: String, options: SinkOptions) -> anyhow::Result<SinkStats>;
     fn extract(&self, options: ExtractOptions) -> anyhow::Result<String>;
-    fn changes(&self, repo_path: String, options: Option<ChangesOptions>) -> anyhow::Result<Box<dyn PollStream<ChangeBatch>>>;
-    fn driver_plan(&self, options: Option<DriverPlanOptions>) -> anyhow::Result<Box<dyn PollStream<Statement>>>;
+    fn changes(
+        &self,
+        repo_path: String,
+        options: Option<ChangesOptions>,
+    ) -> anyhow::Result<Box<dyn PollStream<ChangeBatch>>>;
+    fn driver_plan(
+        &self,
+        options: Option<DriverPlanOptions>,
+    ) -> anyhow::Result<Box<dyn PollStream<Statement>>>;
     fn rebuild(&self, options: RebuildOptions) -> anyhow::Result<i64>;
 }
 
 /// Diff two commits (`base...head` when threeDot).
 #[pyfunction]
 #[pyo3(signature = (repo_path, base, head, three_dot))]
-fn diff_commits(py: Python<'_>, repo_path: String, base: String, head: String, three_dot: bool) -> PyResult<Vec<FileDiff>> {
-    py.detach(move || <crate::core_impl::GitImpl as GitCore>::diff_commits(repo_path, base, head, three_dot)).map_err(err)
+fn diff_commits(
+    py: Python<'_>,
+    repo_path: String,
+    base: String,
+    head: String,
+    three_dot: bool,
+) -> PyResult<Vec<FileDiff>> {
+    py.detach(move || {
+        <crate::core_impl::GitImpl as GitCore>::diff_commits(repo_path, base, head, three_dot)
+    })
+    .map_err(err)
 }
 
 /// A file's content at a commit — null when absent or binary.
 #[pyfunction]
 #[pyo3(signature = (repo_path, commit, path))]
-fn file_at(py: Python<'_>, repo_path: String, commit: String, path: String) -> PyResult<Option<String>> {
-    py.detach(move || <crate::core_impl::GitImpl as GitCore>::file_at(repo_path, commit, path)).map_err(err)
+fn file_at(
+    py: Python<'_>,
+    repo_path: String,
+    commit: String,
+    path: String,
+) -> PyResult<Option<String>> {
+    py.detach(move || <crate::core_impl::GitImpl as GitCore>::file_at(repo_path, commit, path))
+        .map_err(err)
 }
 
 #[pyfunction]
 #[pyo3(signature = (repo_path, name))]
 fn branch_exists(py: Python<'_>, repo_path: String, name: String) -> PyResult<bool> {
-    py.detach(move || <crate::core_impl::GitImpl as GitCore>::branch_exists(repo_path, name)).map_err(err)
+    py.detach(move || <crate::core_impl::GitImpl as GitCore>::branch_exists(repo_path, name))
+        .map_err(err)
 }
 
 #[pyfunction]
 #[pyo3(signature = (repo_path))]
 fn current_branch(py: Python<'_>, repo_path: String) -> PyResult<String> {
-    py.detach(move || <crate::core_impl::GitImpl as GitCore>::current_branch(repo_path)).map_err(err)
+    py.detach(move || <crate::core_impl::GitImpl as GitCore>::current_branch(repo_path))
+        .map_err(err)
 }
 
 /// Commit subjects+bodies along a branch (JSON).
 #[pyfunction]
 #[pyo3(signature = (repo_path, branch))]
 fn commit_bodies(py: Python<'_>, repo_path: String, branch: String) -> PyResult<String> {
-    py.detach(move || <crate::core_impl::GitImpl as GitCore>::commit_bodies(repo_path, branch)).map_err(err)
+    py.detach(move || <crate::core_impl::GitImpl as GitCore>::commit_bodies(repo_path, branch))
+        .map_err(err)
 }
 
 /// Remote branch names matching a pattern (trailing-`*` glob). Fetches first.
 #[pyfunction]
 #[pyo3(signature = (repo_path, pattern))]
 fn ls_remote_heads(py: Python<'_>, repo_path: String, pattern: String) -> PyResult<Vec<String>> {
-    py.detach(move || <crate::core_impl::GitImpl as GitCore>::ls_remote_heads(repo_path, pattern)).map_err(err)
+    py.detach(move || <crate::core_impl::GitImpl as GitCore>::ls_remote_heads(repo_path, pattern))
+        .map_err(err)
 }
 
 /// Poll-based stream from `Entl.changes`, dressed as a Python iterator.
@@ -408,7 +540,9 @@ impl Entl {
     /// Open (or create) the .duckdb at `dbPath` and apply the schema.
     #[new]
     fn new(db_path: String) -> PyResult<Self> {
-        Ok(Self { core: Arc::new(<crate::core_impl::EntlImpl as EntlCore>::open(db_path).map_err(err)?) })
+        Ok(Self {
+            core: Arc::new(<crate::core_impl::EntlImpl as EntlCore>::open(db_path).map_err(err)?),
+        })
     }
     /// Load git history from `repoPath` (one-way, incremental).
     #[pyo3(signature = (repo_path))]
@@ -437,41 +571,115 @@ impl Entl {
     }
     /// Pull `repoPath` and sync it into a target store, in one call.
     #[pyo3(signature = (repo_path, target, path=None, github=None, tables=None, exclude=None, rename=None, schema=None, objects=None))]
-    fn sink(&self, py: Python<'_>, repo_path: String, target: SinkTarget, path: Option<String>, github: Option<bool>, tables: Option<Vec<String>>, exclude: Option<Vec<String>>, rename: Option<Vec<TableRename>>, schema: Option<String>, objects: Option<bool>) -> PyResult<SinkStats> {
-        let sink_options_arg = SinkOptions { target, path, github, tables, exclude, rename, schema, objects };
+    fn sink(
+        &self,
+        py: Python<'_>,
+        repo_path: String,
+        target: SinkTarget,
+        path: Option<String>,
+        github: Option<bool>,
+        tables: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+        rename: Option<Vec<TableRename>>,
+        schema: Option<String>,
+        objects: Option<bool>,
+    ) -> PyResult<SinkStats> {
+        let sink_options_arg = SinkOptions {
+            target,
+            path,
+            github,
+            tables,
+            exclude,
+            rename,
+            schema,
+            objects,
+        };
 
         let core = self.core.clone();
-        py.detach(move || core.sink(repo_path, sink_options_arg)).map_err(err)
+        py.detach(move || core.sink(repo_path, sink_options_arg))
+            .map_err(err)
     }
     /// Read a store back into canonical rows (JSON; oids hex, timestamps RFC3339).
     #[pyo3(signature = (source, path, tables=None, schema=None))]
-    fn extract(&self, py: Python<'_>, source: String, path: String, tables: Option<Vec<String>>, schema: Option<String>) -> PyResult<String> {
-        let extract_options_arg = ExtractOptions { source, path, tables, schema };
+    fn extract(
+        &self,
+        py: Python<'_>,
+        source: String,
+        path: String,
+        tables: Option<Vec<String>>,
+        schema: Option<String>,
+    ) -> PyResult<String> {
+        let extract_options_arg = ExtractOptions {
+            source,
+            path,
+            tables,
+            schema,
+        };
 
         let core = self.core.clone();
-        py.detach(move || core.extract(extract_options_arg)).map_err(err)
+        py.detach(move || core.extract(extract_options_arg))
+            .map_err(err)
     }
     /// Stream the change batches from one pull (the stream plane).
     #[pyo3(signature = (repo_path, github=None, objects=None))]
-    fn changes(&self, repo_path: String, github: Option<bool>, objects: Option<bool>) -> PyResult<Changes> {
+    fn changes(
+        &self,
+        repo_path: String,
+        github: Option<bool>,
+        objects: Option<bool>,
+    ) -> PyResult<Changes> {
         let changes_options_arg = ChangesOptions { github, objects };
 
-        Ok(Changes { stream: self.core.changes(repo_path, Some(changes_options_arg)).map_err(err)? })
+        Ok(Changes {
+            stream: self
+                .core
+                .changes(repo_path, Some(changes_options_arg))
+                .map_err(err)?,
+        })
     }
     /// Backfill this store into a driver target: stream {sql, params} for the host to execute.
     #[pyo3(signature = (tables=None, exclude=None, rename=None, schema=None))]
-    fn driver_plan(&self, tables: Option<Vec<String>>, exclude: Option<Vec<String>>, rename: Option<Vec<TableRename>>, schema: Option<String>) -> PyResult<DriverPlan> {
-        let driver_plan_options_arg = DriverPlanOptions { tables, exclude, rename, schema };
+    fn driver_plan(
+        &self,
+        tables: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+        rename: Option<Vec<TableRename>>,
+        schema: Option<String>,
+    ) -> PyResult<DriverPlan> {
+        let driver_plan_options_arg = DriverPlanOptions {
+            tables,
+            exclude,
+            rename,
+            schema,
+        };
 
-        Ok(DriverPlan { stream: self.core.driver_plan(Some(driver_plan_options_arg)).map_err(err)? })
+        Ok(DriverPlan {
+            stream: self
+                .core
+                .driver_plan(Some(driver_plan_options_arg))
+                .map_err(err)?,
+        })
     }
     /// Reconstruct a git repo from a store (needs objects: true at sink time). Returns commits rebuilt.
     #[pyo3(signature = (source, dest, out, schema=None))]
-    fn rebuild(&self, py: Python<'_>, source: String, dest: String, out: String, schema: Option<String>) -> PyResult<i64> {
-        let rebuild_options_arg = RebuildOptions { source, dest, out, schema };
+    fn rebuild(
+        &self,
+        py: Python<'_>,
+        source: String,
+        dest: String,
+        out: String,
+        schema: Option<String>,
+    ) -> PyResult<i64> {
+        let rebuild_options_arg = RebuildOptions {
+            source,
+            dest,
+            out,
+            schema,
+        };
 
         let core = self.core.clone();
-        py.detach(move || core.rebuild(rebuild_options_arg)).map_err(err)
+        py.detach(move || core.rebuild(rebuild_options_arg))
+            .map_err(err)
     }
     // @manual: watch — hand-written in lib.rs if this binding offers it.
 }

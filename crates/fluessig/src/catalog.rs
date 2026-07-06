@@ -86,7 +86,11 @@ pub fn validate(c: &Catalog) -> Diagnostics {
     }
 
     let entity_names: HashSet<&str> = c.entities.iter().map(|e| e.name.as_str()).collect();
-    let edge_names: HashSet<&str> = c.relation_properties.iter().map(|s| s.name.as_str()).collect();
+    let edge_names: HashSet<&str> = c
+        .relation_properties
+        .iter()
+        .map(|s| s.name.as_str())
+        .collect();
 
     for e in &c.entities {
         validate_entity(c, e, &entity_names, &edge_names, &mut d);
@@ -97,7 +101,10 @@ pub fn validate(c: &Catalog) -> Diagnostics {
     for s in &c.relation_properties {
         for f in &s.fields {
             if f.relation.is_some() {
-                d.err(format!("edge struct {}.{}: edge properties must be flat data (no relations)", s.name, f.name));
+                d.err(format!(
+                    "edge struct {}.{}: edge properties must be flat data (no relations)",
+                    s.name, f.name
+                ));
             }
         }
     }
@@ -123,7 +130,10 @@ fn validate_entity(
         }
     }
     if e.is_abstract && e.table.is_some() {
-        d.err(format!("{}: abstract roots have no table of their own (@name belongs on the leaves)", e.name));
+        d.err(format!(
+            "{}: abstract roots have no table of their own (@name belongs on the leaves)",
+            e.name
+        ));
     }
 
     // ── keys: every declared key names an own field; concrete entities must have
@@ -135,7 +145,10 @@ fn validate_entity(
     }
     for f in &e.fields {
         if f.key && !e.key.contains(&f.name) {
-            d.err(format!("{}: field {} marked key but missing from the key list", e.name, f.name));
+            d.err(format!(
+                "{}: field {} marked key but missing from the key list",
+                e.name, f.name
+            ));
         }
     }
 
@@ -144,10 +157,16 @@ fn validate_entity(
         match (&f.relation, f.ty.innermost()) {
             (Some(rel), TypeRef::Ref { name, entity: true }) => {
                 if rel.to != *name {
-                    d.err(format!("{}.{}: relation.to {} disagrees with the field type {name}", e.name, f.name, rel.to));
+                    d.err(format!(
+                        "{}.{}: relation.to {} disagrees with the field type {name}",
+                        e.name, f.name, rel.to
+                    ));
                 }
                 match c.entity(&rel.to) {
-                    None => d.err(format!("{}.{}: relation targets unknown entity {}", e.name, f.name, rel.to)),
+                    None => d.err(format!(
+                        "{}.{}: relation targets unknown entity {}",
+                        e.name, f.name, rel.to
+                    )),
                     Some(target) => {
                         // polymorphic target ⇔ discriminator column
                         if target.is_abstract && rel.type_column.is_none() {
@@ -165,23 +184,42 @@ fn validate_entity(
                         // composition targets belong to their parent: no independent global key expected;
                         // (v1: only flag compositions that target an abstract family — unprojectable)
                         if rel.kind == RelKind::Composition && target.is_abstract {
-                            d.err(format!("{}.{}: cannot compose an abstract family", e.name, f.name));
+                            d.err(format!(
+                                "{}.{}: cannot compose an abstract family",
+                                e.name, f.name
+                            ));
                         }
                     }
                 }
                 if let Some(props) = &rel.properties {
                     if !edges.contains(props.as_str()) {
-                        d.err(format!("{}.{}: @edge names unknown edge struct {props}", e.name, f.name));
+                        d.err(format!(
+                            "{}.{}: @edge names unknown edge struct {props}",
+                            e.name, f.name
+                        ));
                     }
                 }
             }
-            (Some(_), _) => d.err(format!("{}.{}: relation on a non-entity-typed field", e.name, f.name)),
-            (None, TypeRef::Ref { name, entity: true }) => {
-                d.err(format!("{}.{}: entity-typed field {name} lowered without relation info (emitter bug)", e.name, f.name))
-            }
-            (None, TypeRef::Ref { name, entity: false }) => {
+            (Some(_), _) => d.err(format!(
+                "{}.{}: relation on a non-entity-typed field",
+                e.name, f.name
+            )),
+            (None, TypeRef::Ref { name, entity: true }) => d.err(format!(
+                "{}.{}: entity-typed field {name} lowered without relation info (emitter bug)",
+                e.name, f.name
+            )),
+            (
+                None,
+                TypeRef::Ref {
+                    name,
+                    entity: false,
+                },
+            ) => {
                 // a value-struct field: the struct must exist somewhere
-                if c.value_struct(name).is_none() && !entities.contains(name.as_str()) && !edges.contains(name.as_str()) {
+                if c.value_struct(name).is_none()
+                    && !entities.contains(name.as_str())
+                    && !edges.contains(name.as_str())
+                {
                     d.err(format!("{}.{}: unknown struct {name}", e.name, f.name));
                 }
             }
@@ -198,18 +236,26 @@ fn validate_entity(
     for f in &e.fields {
         let Some(der) = &f.derived else { continue };
         if !matches!(der.agg.as_str(), "exists" | "count") {
-            d.err(format!("{}.{}: @derived agg {} — v1 supports exists|count", e.name, f.name, der.agg));
+            d.err(format!(
+                "{}.{}: @derived agg {} — v1 supports exists|count",
+                e.name, f.name, der.agg
+            ));
         }
         let all = c.flattened_fields(e);
         match all.iter().find(|rf| rf.name == der.of) {
-            None => d.err(format!("{}.{}: @derived of {} — no such field", e.name, f.name, der.of)),
+            None => d.err(format!(
+                "{}.{}: @derived of {} — no such field",
+                e.name, f.name, der.of
+            )),
             Some(rf) => match &rf.relation {
                 Some(rel) if rel.cardinality == crate::ir::Cardinality::Many => {
                     // filter keys must be edge-property fields (literal equality)
                     if let Some(filter) = &der.filter {
                         let props = rel.properties.as_deref().and_then(|p| c.edge_struct(p));
                         for key in filter.keys() {
-                            let known = props.map(|s| s.fields.iter().any(|pf| &pf.name == key)).unwrap_or(false);
+                            let known = props
+                                .map(|s| s.fields.iter().any(|pf| &pf.name == key))
+                                .unwrap_or(false);
                             if !known {
                                 d.err(format!(
                                     "{}.{}: @derived filter key {key} is not an edge property of {}",
@@ -219,7 +265,10 @@ fn validate_entity(
                         }
                     }
                 }
-                _ => d.err(format!("{}.{}: @derived of {} must be a to-many relation", e.name, f.name, der.of)),
+                _ => d.err(format!(
+                    "{}.{}: @derived of {} must be a to-many relation",
+                    e.name, f.name, der.of
+                )),
             },
         }
     }
@@ -229,9 +278,16 @@ fn validate_entity(
     if e.is_abstract {
         let root_key = c.flattened_key(e);
         if root_key.is_empty() {
-            d.err(format!("{}: an abstract family root must carry the family key", e.name));
+            d.err(format!(
+                "{}: an abstract family root must carry the family key",
+                e.name
+            ));
         }
-        for leaf in c.entities.iter().filter(|l| l.extends.as_deref() == Some(&e.name)) {
+        for leaf in c
+            .entities
+            .iter()
+            .filter(|l| l.extends.as_deref() == Some(&e.name))
+        {
             // leaves may not redeclare/extend the key — identity is the family's
             if !leaf.key.is_empty() {
                 d.err(format!(

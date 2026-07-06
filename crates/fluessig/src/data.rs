@@ -88,7 +88,11 @@ impl SqlCodec {
     pub fn new(catalog: &Catalog, dialect: Dialect) -> Self {
         let defs = tables(catalog, dialect);
         let rank = topo_rank(catalog, &defs);
-        Self { dialect, defs, rank }
+        Self {
+            dialect,
+            defs,
+            rank,
+        }
     }
 
     pub fn table(&self, name: &str) -> Option<&TableDef> {
@@ -145,7 +149,9 @@ impl SqlCodec {
     /// `DELETE … WHERE pk = …` — delete rows carry key columns only (§5).
     pub fn delete_sql(&self, def: &TableDef, table_name: &str) -> Result<String, String> {
         if def.pk.is_empty() {
-            return Err(format!("{table_name}: cannot delete by key — table has no primary key"));
+            return Err(format!(
+                "{table_name}: cannot delete by key — table has no primary key"
+            ));
         }
         let cond: Vec<String> = def
             .pk
@@ -153,7 +159,10 @@ impl SqlCodec {
             .enumerate()
             .map(|(i, c)| format!("\"{c}\" = {}", self.placeholder(i + 1)))
             .collect();
-        Ok(format!("DELETE FROM \"{table_name}\" WHERE {}", cond.join(" AND ")))
+        Ok(format!(
+            "DELETE FROM \"{table_name}\" WHERE {}",
+            cond.join(" AND ")
+        ))
     }
 
     /// Compile a Transaction into a Plan. v1 SQL: one Step; statements ordered
@@ -178,7 +187,10 @@ impl SqlCodec {
                 // delete rows must address the full key
                 for k in &def.pk {
                     if !m.columns.contains(k) {
-                        return Err(format!("{}: delete rows must carry key column {k}", m.table));
+                        return Err(format!(
+                            "{}: delete rows must carry key column {k}",
+                            m.table
+                        ));
                     }
                 }
                 deletes.push(m);
@@ -214,16 +226,26 @@ impl SqlCodec {
                         .pk
                         .iter()
                         .map(|k| {
-                            let i = m.columns.iter().position(|c| c == k).expect("checked above");
+                            let i = m
+                                .columns
+                                .iter()
+                                .position(|c| c == k)
+                                .expect("checked above");
                             row[i].clone()
                         })
                         .collect(),
                     _ => row.clone(),
                 };
-                statements.push(Statement { sql: sql.clone(), params, table: m.table.clone() });
+                statements.push(Statement {
+                    sql: sql.clone(),
+                    params,
+                    table: m.table.clone(),
+                });
             }
         }
-        Ok(Plan { steps: vec![Step { statements }] })
+        Ok(Plan {
+            steps: vec![Step { statements }],
+        })
     }
 }
 
@@ -262,7 +284,10 @@ fn topo_rank(c: &Catalog, defs: &BTreeMap<String, TableDef>) -> BTreeMap<String,
                 }
                 Cardinality::Many => {
                     // the association/edge table depends on both endpoints
-                    let edge = rel.table.clone().unwrap_or_else(|| crate::ir::snake(&f.name));
+                    let edge = rel
+                        .table
+                        .clone()
+                        .unwrap_or_else(|| crate::ir::snake(&f.name));
                     let mut ends = vec![this.clone()];
                     ends.extend(leaves_of(&rel.to));
                     deps.entry(edge).or_default().extend(ends);
@@ -276,7 +301,12 @@ fn topo_rank(c: &Catalog, defs: &BTreeMap<String, TableDef>) -> BTreeMap<String,
     for _ in 0..defs.len() {
         let mut changed = false;
         for (t, ds) in &deps {
-            let max_dep = ds.iter().filter_map(|d| rank.get(d)).copied().max().unwrap_or(0);
+            let max_dep = ds
+                .iter()
+                .filter_map(|d| rank.get(d))
+                .copied()
+                .max()
+                .unwrap_or(0);
             if let Some(r) = rank.get_mut(t) {
                 if *r <= max_dep {
                     let next = max_dep + 1;
@@ -317,7 +347,9 @@ mod tests {
         );
         let lite = codec(Dialect::Sqlite);
         let def = lite.table("commit_parents").unwrap().clone();
-        let cols = ["commit_oid", "parent_oid", "idx"].map(String::from).to_vec();
+        let cols = ["commit_oid", "parent_oid", "idx"]
+            .map(String::from)
+            .to_vec();
         assert_eq!(
             lite.upsert_sql(&def, "commit_parents", &cols),
             "INSERT INTO \"commit_parents\" (\"commit_oid\", \"parent_oid\", \"idx\") VALUES (?, ?, ?) \
@@ -347,14 +379,35 @@ mod tests {
         // scrambled: edge first, then the entity it references
         let tx = Transaction {
             mutations: vec![
-                m("commit_parents", Op::Upsert, &["commit_oid", "parent_oid", "idx"]),
-                m("commits", Op::Upsert, &["oid", "repo_id", "tree_oid", "message", "summary", "parent_count", "is_merge", "gpg_signed"]),
+                m(
+                    "commit_parents",
+                    Op::Upsert,
+                    &["commit_oid", "parent_oid", "idx"],
+                ),
+                m(
+                    "commits",
+                    Op::Upsert,
+                    &[
+                        "oid",
+                        "repo_id",
+                        "tree_oid",
+                        "message",
+                        "summary",
+                        "parent_count",
+                        "is_merge",
+                        "gpg_signed",
+                    ],
+                ),
                 m("repos", Op::Upsert, &["id", "path"]),
             ],
         };
         let plan = pg.plan(&tx).unwrap();
         assert_eq!(plan.steps.len(), 1, "SQL is one-step-transactional");
-        let order: Vec<&str> = plan.steps[0].statements.iter().map(|s| s.table.as_str()).collect();
+        let order: Vec<&str> = plan.steps[0]
+            .statements
+            .iter()
+            .map(|s| s.table.as_str())
+            .collect();
         assert_eq!(order, ["repos", "commits", "commit_parents"]);
 
         // deletes reverse: children first
@@ -364,10 +417,7 @@ mod tests {
                 m("commit_parents", Op::Delete, &["commit_oid", "idx"]),
             ],
         };
-        let order: Vec<String> = pg
-            .plan(&tx)
-            .unwrap()
-            .steps[0]
+        let order: Vec<String> = pg.plan(&tx).unwrap().steps[0]
             .statements
             .iter()
             .map(|s| s.table.clone())

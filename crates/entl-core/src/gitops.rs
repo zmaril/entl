@@ -45,7 +45,9 @@ pub fn commit_bodies(repo_path: &str, branch: &str) -> Result<String> {
     let mut out = String::new();
     for info in repo.rev_walk(tips).all()? {
         let Ok(info) = info else { continue };
-        let Ok(commit) = repo.find_commit(info.id) else { continue };
+        let Ok(commit) = repo.find_commit(info.id) else {
+            continue;
+        };
         if let Ok(msg) = commit.message_raw() {
             out.push_str(&msg.to_string());
             out.push('\0');
@@ -69,7 +71,7 @@ pub fn ls_remote_heads(repo_path: &str, pattern: &str) -> Result<Vec<String>> {
         }
         // shorten() → "origin/pm/task-12-foo"; drop the remote name to get the branch.
         let short = r.name().shorten().to_string();
-        let branch = short.splitn(2, '/').nth(1).unwrap_or(&short);
+        let branch = short.split_once('/').map(|x| x.1).unwrap_or(&short);
         if branch != "HEAD" && glob_match(glob, branch) {
             out.push(branch.to_string());
         }

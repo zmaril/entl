@@ -127,7 +127,10 @@ pub fn git(repo: &Path, args: &[&str]) -> Result<String> {
         .output()
         .with_context(|| format!("git {args:?}"))?;
     if !out.status.success() {
-        bail!("git {args:?} failed: {}", String::from_utf8_lossy(&out.stderr).trim());
+        bail!(
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
     }
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }

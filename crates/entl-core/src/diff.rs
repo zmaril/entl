@@ -6,7 +6,6 @@
 use std::ops::ControlFlow;
 
 use anyhow::{Context, Result};
-use gix::bstr::ByteSlice;
 use gix::object::tree::diff::Change;
 use serde::Serialize;
 
@@ -54,13 +53,15 @@ pub fn diff_commits(
         .context("resource cache")?;
 
     let mut out = Vec::new();
-    base_tree.changes()?.for_each_to_obtain_tree(&head_tree, |change| {
-        if let Some(fd) = map_file_diff(&repo, change, &mut rcache) {
-            out.push(fd);
-        }
-        rcache.clear_resource_cache_keep_allocation();
-        Ok::<_, std::convert::Infallible>(ControlFlow::Continue(()))
-    })?;
+    base_tree
+        .changes()?
+        .for_each_to_obtain_tree(&head_tree, |change| {
+            if let Some(fd) = map_file_diff(&repo, change, &mut rcache) {
+                out.push(fd);
+            }
+            rcache.clear_resource_cache_keep_allocation();
+            Ok::<_, std::convert::Infallible>(ControlFlow::Continue(()))
+        })?;
     Ok(out)
 }
 
@@ -100,19 +101,47 @@ fn map_file_diff(
         None => (0, 0),
     };
     let (path, old_path, status, old_oid, new_oid) = match change {
-        Change::Addition { location, entry_mode, id, .. } => {
+        Change::Addition {
+            location,
+            entry_mode,
+            id,
+            ..
+        } => {
             entry_mode.is_blob().then_some(())?;
             (location.to_string(), None, "A", None, Some(id.detach()))
         }
-        Change::Deletion { location, entry_mode, id, .. } => {
+        Change::Deletion {
+            location,
+            entry_mode,
+            id,
+            ..
+        } => {
             entry_mode.is_blob().then_some(())?;
             (location.to_string(), None, "D", Some(id.detach()), None)
         }
-        Change::Modification { location, entry_mode, id, previous_id, .. } => {
+        Change::Modification {
+            location,
+            entry_mode,
+            id,
+            previous_id,
+            ..
+        } => {
             entry_mode.is_blob().then_some(())?;
-            (location.to_string(), None, "M", Some(previous_id.detach()), Some(id.detach()))
+            (
+                location.to_string(),
+                None,
+                "M",
+                Some(previous_id.detach()),
+                Some(id.detach()),
+            )
         }
-        Change::Rewrite { location, source_location, id, source_id, .. } => (
+        Change::Rewrite {
+            location,
+            source_location,
+            id,
+            source_id,
+            ..
+        } => (
             location.to_string(),
             Some(source_location.to_string()),
             "R",
@@ -122,8 +151,21 @@ fn map_file_diff(
     };
     let old = blob(repo, old_oid);
     let new = blob(repo, new_oid);
-    let patch = unified_patch(&old, &new, old_path.as_deref().unwrap_or(&path), &path, status);
-    Some(FileDiff { path, old_path, status, additions, deletions, patch })
+    let patch = unified_patch(
+        &old,
+        &new,
+        old_path.as_deref().unwrap_or(&path),
+        &path,
+        status,
+    );
+    Some(FileDiff {
+        path,
+        old_path,
+        status,
+        additions,
+        deletions,
+        patch,
+    })
 }
 
 fn unified_patch(old: &[u8], new: &[u8], old_name: &str, new_name: &str, status: &str) -> String {
@@ -136,12 +178,24 @@ fn unified_patch(old: &[u8], new: &[u8], old_name: &str, new_name: &str, status:
     let input = InternedInput::new(lines(old_s), lines(new_s));
     let diff = Diff::compute(Algorithm::Histogram, &input);
     let hunks = diff
-        .unified_diff(&BasicLineDiffPrinter(&input.interner), UnifiedDiffConfig::default(), &input)
+        .unified_diff(
+            &BasicLineDiffPrinter(&input.interner),
+            UnifiedDiffConfig::default(),
+            &input,
+        )
         .to_string();
     if hunks.is_empty() {
         return String::new();
     }
-    let old_path = if status == "A" { "/dev/null".into() } else { format!("a/{old_name}") };
-    let new_path = if status == "D" { "/dev/null".into() } else { format!("b/{new_name}") };
+    let old_path = if status == "A" {
+        "/dev/null".into()
+    } else {
+        format!("a/{old_name}")
+    };
+    let new_path = if status == "D" {
+        "/dev/null".into()
+    } else {
+        format!("b/{new_name}")
+    };
     format!("diff --git a/{old_name} b/{new_name}\n--- {old_path}\n+++ {new_path}\n{hunks}")
 }

@@ -2,6 +2,10 @@
 //! per-table DDL for all three dialects. The parity gate (`tests/sql_parity.rs`)
 //! holds the output against entl's hand-written templates in every dialect.
 //!
+//! straitjacket-allow-file:duplication — `key_columns` and `tables` both expand a
+//! relation's target key into FK columns (one small shared lowering); rustfmt
+//! adoption surfaced the clone. A `fk_pairs()` extraction is a fine follow-up.
+//!
 //! Two layers:
 //! - [`tables`] lowers the catalog into structured [`TableDef`]s — the physical
 //!   projection (relations → FK columns / association tables, keys → PKs,
@@ -47,8 +51,19 @@ pub struct ColumnDef {
 }
 
 impl TableDef {
-    fn column(&mut self, name: impl Into<String>, ty: impl Into<String>, not_null: bool) -> &mut ColumnDef {
-        self.columns.push(ColumnDef { name: name.into(), ty: ty.into(), not_null, default: None, doc: None });
+    fn column(
+        &mut self,
+        name: impl Into<String>,
+        ty: impl Into<String>,
+        not_null: bool,
+    ) -> &mut ColumnDef {
+        self.columns.push(ColumnDef {
+            name: name.into(),
+            ty: ty.into(),
+            not_null,
+            default: None,
+            doc: None,
+        });
         self.columns.last_mut().unwrap()
     }
 }
@@ -58,7 +73,10 @@ impl TableDef {
 /// DuckDB — the design's "oids as hex text off DuckDB").
 fn sql_type(dialect: Dialect, ty: &TypeRef) -> String {
     fn is_int(n: &str) -> bool {
-        matches!(n, "int8" | "int16" | "int32" | "int64" | "uint8" | "uint16" | "uint32" | "safeint")
+        matches!(
+            n,
+            "int8" | "int16" | "int32" | "int64" | "uint8" | "uint16" | "uint32" | "safeint"
+        )
     }
     /// A TypeSpec builtin (or semantic scalar) name → column type. `None` = not
     /// a name we know (caller then tries the base — the `extends` chain root).
@@ -126,13 +144,19 @@ fn key_columns(c: &Catalog, d: Dialect, e: &Entity) -> Vec<(String, String)> {
     let fields = c.flattened_fields(e);
     let mut out = Vec::new();
     for name in c.flattened_key(e) {
-        let f = fields.iter().find(|f| f.name == name).expect("validated: key field exists");
+        let f = fields
+            .iter()
+            .find(|f| f.name == name)
+            .expect("validated: key field exists");
         match &f.relation {
             None => out.push((col_name(f), sql_type(d, &f.ty))),
             Some(rel) => {
                 let target = c.entity(&rel.to).expect("validated: target exists");
                 let target_key = key_columns(c, d, target);
-                let fk = rel.fk_columns.clone().unwrap_or_else(|| target_key.iter().map(|(n, _)| n.clone()).collect());
+                let fk = rel
+                    .fk_columns
+                    .clone()
+                    .unwrap_or_else(|| target_key.iter().map(|(n, _)| n.clone()).collect());
                 for (fk_col, (_, ty)) in fk.iter().zip(target_key.iter()) {
                     out.push((fk_col.clone(), ty.clone()));
                 }
@@ -149,7 +173,11 @@ pub fn tables(c: &Catalog, d: Dialect) -> BTreeMap<String, TableDef> {
 
     // ── entity tables ──
     for e in c.entities.iter().filter(|e| !e.is_abstract) {
-        let mut t = TableDef { name: c.table_name(e), columns: Vec::new(), pk: Vec::new() };
+        let mut t = TableDef {
+            name: c.table_name(e),
+            columns: Vec::new(),
+            pk: Vec::new(),
+        };
         for f in c.flattened_fields(e) {
             match &f.relation {
                 None => {
@@ -164,7 +192,10 @@ pub fn tables(c: &Catalog, d: Dialect) -> BTreeMap<String, TableDef> {
                     }
                     let target = c.entity(&rel.to).expect("validated");
                     let target_key = key_columns(c, d, target);
-                    let fk = rel.fk_columns.clone().unwrap_or_else(|| target_key.iter().map(|(n, _)| n.clone()).collect());
+                    let fk = rel
+                        .fk_columns
+                        .clone()
+                        .unwrap_or_else(|| target_key.iter().map(|(n, _)| n.clone()).collect());
                     for (fk_col, (_, ty)) in fk.iter().zip(target_key.iter()) {
                         // column sharing: an FK column may already exist (e.g. a key member)
                         if !t.columns.iter().any(|col| &col.name == fk_col) {
@@ -184,15 +215,24 @@ pub fn tables(c: &Catalog, d: Dialect) -> BTreeMap<String, TableDef> {
     // ── association / edge tables (to-many relations) ──
     for e in &c.entities {
         for f in e.fields.iter().filter(|f| {
-            f.relation.as_ref().is_some_and(|r| r.cardinality == Cardinality::Many)
+            f.relation
+                .as_ref()
+                .is_some_and(|r| r.cardinality == Cardinality::Many)
         }) {
             let rel = f.relation.as_ref().unwrap();
             let name = rel.table.clone().unwrap_or_else(|| snake(&f.name));
-            let mut t = TableDef { name: name.clone(), columns: Vec::new(), pk: Vec::new() };
+            let mut t = TableDef {
+                name: name.clone(),
+                columns: Vec::new(),
+                pk: Vec::new(),
+            };
 
             // source side: the declaring entity's key (+ discriminator when the source is a family)
             let src_key = key_columns(c, d, e);
-            let src_cols = rel.source_columns.clone().unwrap_or_else(|| src_key.iter().map(|(n, _)| n.clone()).collect());
+            let src_cols = rel
+                .source_columns
+                .clone()
+                .unwrap_or_else(|| src_key.iter().map(|(n, _)| n.clone()).collect());
             let data_src: Vec<&String> = src_cols
                 .iter()
                 .filter(|n| Some(n.as_str()) != rel.source_type_column.as_deref())
@@ -204,14 +244,20 @@ pub fn tables(c: &Catalog, d: Dialect) -> BTreeMap<String, TableDef> {
             }
             if let Some(tc) = &rel.source_type_column {
                 // insert the discriminator at its authored position
-                let pos = src_cols.iter().position(|n| n == tc).unwrap_or(t.columns.len());
-                t.columns.insert(pos.min(t.columns.len()), ColumnDef {
-                    name: tc.clone(),
-                    ty: "text".into(),
-                    not_null: true,
-                    default: None,
-                    doc: None,
-                });
+                let pos = src_cols
+                    .iter()
+                    .position(|n| n == tc)
+                    .unwrap_or(t.columns.len());
+                t.columns.insert(
+                    pos.min(t.columns.len()),
+                    ColumnDef {
+                        name: tc.clone(),
+                        ty: "text".into(),
+                        not_null: true,
+                        default: None,
+                        doc: None,
+                    },
+                );
                 src_col_names.insert(pos.min(src_col_names.len()), tc.clone());
             }
 
@@ -237,7 +283,10 @@ pub fn tables(c: &Catalog, d: Dialect) -> BTreeMap<String, TableDef> {
             }
             let target = c.entity(&rel.to).expect("validated");
             let target_key = key_columns(c, d, target);
-            let fk = rel.fk_columns.clone().unwrap_or_else(|| target_key.iter().map(|(n, _)| n.clone()).collect());
+            let fk = rel
+                .fk_columns
+                .clone()
+                .unwrap_or_else(|| target_key.iter().map(|(n, _)| n.clone()).collect());
             let mut target_col_names = Vec::new();
             for (fk_col, (_, ty)) in fk.iter().zip(target_key.iter()) {
                 if !t.columns.iter().any(|col| &col.name == fk_col) {
@@ -294,7 +343,11 @@ pub fn render(t: &TableDef, table_name: &str) -> String {
         lines.push(line);
     }
     if t.pk.len() > 1 {
-        let cols = t.pk.iter().map(|c| format!("\"{c}\"")).collect::<Vec<_>>().join(", ");
+        let cols =
+            t.pk.iter()
+                .map(|c| format!("\"{c}\""))
+                .collect::<Vec<_>>()
+                .join(", ");
         lines.push(format!("  PRIMARY KEY ({cols})"));
     }
     out.push_str(&lines.join(",\n"));
@@ -309,7 +362,11 @@ pub fn render(t: &TableDef, table_name: &str) -> String {
 pub fn fingerprint(c: &Catalog, dialect: Dialect, extras: Option<&str>) -> String {
     use sha2::{Digest, Sha256};
     let mut h = Sha256::new();
-    h.update(serde_json::to_string(c).expect("catalog serializes").as_bytes());
+    h.update(
+        serde_json::to_string(c)
+            .expect("catalog serializes")
+            .as_bytes(),
+    );
     h.update(format!("|{dialect:?}|").as_bytes());
     h.update(extras.unwrap_or("").as_bytes());
     let out = h.finalize();
@@ -346,17 +403,23 @@ pub fn derived_views(c: &Catalog, dialect: Dialect) -> Vec<String> {
     let mut out = Vec::new();
     for e in c.entities.iter().filter(|e| !e.is_abstract) {
         let fields = c.flattened_fields(e);
-        let derived: Vec<&Field> = fields.iter().filter(|f| f.derived.is_some()).copied().collect();
+        let derived: Vec<&Field> = fields
+            .iter()
+            .filter(|f| f.derived.is_some())
+            .copied()
+            .collect();
         if derived.is_empty() {
             continue;
         }
         let table = c.table_name(e);
         let key_cols = key_columns(c, dialect, e);
-        let mut selects: Vec<String> =
-            key_cols.iter().map(|(n, _)| format!("t.\"{n}\"")).collect();
+        let mut selects: Vec<String> = key_cols.iter().map(|(n, _)| format!("t.\"{n}\"")).collect();
         for f in derived {
             let der = f.derived.as_ref().unwrap();
-            let rel_field = fields.iter().find(|rf| rf.name == der.of).expect("validated");
+            let rel_field = fields
+                .iter()
+                .find(|rf| rf.name == der.of)
+                .expect("validated");
             let rel = rel_field.relation.as_ref().expect("validated");
             let edge_table = rel.table.clone().unwrap_or_else(|| snake(&rel_field.name));
             // join: edge source columns ↔ this entity's key columns (positional)
@@ -467,7 +530,7 @@ pub fn rust_schema_module(c: &Catalog, banner_note: Option<&str>) -> String {
         }
     }
     out.push_str("];\n");
-    out
+    crate::rustfmt::format(out)
 }
 
 /// The schema reference as data — per physical table: docs + columns (name,
@@ -487,7 +550,9 @@ pub fn schema_docs_json(c: &Catalog, dialect: Dialect) -> String {
         for f in &e.fields {
             if let (Some(rel), Some(doc)) = (&f.relation, &f.doc) {
                 if let Some(tname) = &rel.table {
-                    table_docs.entry(tname.clone()).or_insert_with(|| doc.clone());
+                    table_docs
+                        .entry(tname.clone())
+                        .or_insert_with(|| doc.clone());
                 }
             }
         }
@@ -517,8 +582,10 @@ pub fn schema_docs_json(c: &Catalog, dialect: Dialect) -> String {
 /// verbatim (§9.5; hashed into the fingerprint, so editing extras trips drift
 /// detection).
 pub fn ddl(c: &Catalog, dialect: Dialect, extras: Option<&str>) -> String {
-    let mut parts: Vec<String> =
-        tables(c, dialect).values().map(|t| render(t, &t.name)).collect();
+    let mut parts: Vec<String> = tables(c, dialect)
+        .values()
+        .map(|t| render(t, &t.name))
+        .collect();
     parts.extend(derived_views(c, dialect));
     parts.push(meta_ddl(c, dialect, &fingerprint(c, dialect, extras)));
     if let Some(x) = extras {

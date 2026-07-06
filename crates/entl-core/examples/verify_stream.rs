@@ -34,7 +34,12 @@ fn main() -> anyhow::Result<()> {
                     e.0 += 1;
                     e.1 += b.len();
                     if shown.insert(b.table.clone()) {
-                        println!("\n── first {} batch ({}, {} rows) ──", b.table, b.op.as_str(), b.len());
+                        println!(
+                            "\n── first {} batch ({}, {} rows) ──",
+                            b.table,
+                            b.op.as_str(),
+                            b.len()
+                        );
                         let p = b.pretty();
                         for line in p.lines().take(6) {
                             println!("{line}");

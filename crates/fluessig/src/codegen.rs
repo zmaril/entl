@@ -37,7 +37,9 @@ fn camel(s: &str) -> String {
 fn pascal(s: &str) -> String {
     let c = camel(s);
     let mut it = c.chars();
-    it.next().map(|f| f.to_ascii_uppercase().to_string() + it.as_str()).unwrap_or_default()
+    it.next()
+        .map(|f| f.to_ascii_uppercase().to_string() + it.as_str())
+        .unwrap_or_default()
 }
 
 const BANNER: &str = "AUTO-GENERATED from the fluessig catalog (crates/fluessig/entl.tsp). Do not edit by hand.\nRegenerate: the fluessig-gen command in crates/fluessig/plan.txt (or `bun run gen` in crates/entl-node).";
@@ -123,7 +125,11 @@ pub fn python_models(c: &Catalog, banner_note: Option<&str>) -> String {
         $(for cls in classes join ($['\n']) => $cls)
     };
     let body = t.to_file_string().expect("python renders");
-    format!("# {}\n\n{}", banner_with(banner_note).replace('\n', "\n# "), body)
+    format!(
+        "# {}\n\n{}",
+        banner_with(banner_note).replace('\n', "\n# "),
+        body
+    )
 }
 
 /// `tables.gen.ts` — the typed `EntlTables` enum + `ENTL_TABLES`. Excludes
@@ -145,7 +151,11 @@ pub fn ts_tables(c: &Catalog, banner_note: Option<&str>) -> String {
         $("/** Every entl table name (the values of EntlTables). */")
         export const ENTL_TABLES = Object.values(EntlTables) as EntlTable[];
     };
-    format!("// {}\n\n{}", banner_with(banner_note).replace('\n', "\n// "), t.to_file_string().expect("ts renders"))
+    format!(
+        "// {}\n\n{}",
+        banner_with(banner_note).replace('\n', "\n// "),
+        t.to_file_string().expect("ts renders")
+    )
 }
 
 /// `schema.gen.ts` — the Drizzle (pg-core) schema for every mirrored table:
@@ -219,7 +229,11 @@ pub fn ts_drizzle(c: &Catalog, banner_note: Option<&str>) -> String {
 
         $(for d in table_defs join ($['\n']) => $d)
     };
-    format!("// {}\n\n{}", banner_with(banner_note).replace('\n', "\n// "), t.to_file_string().expect("ts renders"))
+    format!(
+        "// {}\n\n{}",
+        banner_with(banner_note).replace('\n', "\n// "),
+        t.to_file_string().expect("ts renders")
+    )
 }
 
 /// The mirrored table set: everything except internal bookkeeping.

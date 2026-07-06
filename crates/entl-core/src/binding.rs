@@ -19,17 +19,25 @@
 /// entl_core::binding_core_impls!(rename_from = from);   // node / ruby
 /// entl_core::binding_core_impls!(rename_from = from_);  // python
 /// ```
+// This macro deliberately uses `crate::generated` (not `$crate::generated`) so it
+// resolves at the EXPANSION site — each binding's own generated module. `$crate`
+// would point at entl-core, which has no `generated` module. Hence two guards:
+//  - `#[rustfmt::skip]`: rustfmt rewrites `crate::` → `$crate::` in macro bodies.
+//  - `#[allow(clippy::crate_in_macro_def)]`: clippy flags `crate::` in a macro def
+//    and suggests `$crate::` — correct in general, wrong here (we want the caller).
 #[macro_export]
+#[rustfmt::skip]
+#[allow(clippy::crate_in_macro_def)]
 macro_rules! binding_core_impls {
     (rename_from = $rename_from:ident) => {
     use std::sync::Arc;
     use std::sync::atomic::AtomicU64;
     use std::time::Duration;
-    
+
     use anyhow::Result;
-    
+
     use crate::generated::*;
-    
+
     /// Lightweight `git fetch` of origin's branches (no PR refs / tags) so the
     /// remote-tracking refs the live reads consult are current on every call.
     pub fn git_fetch_branches(path: &str) {
@@ -37,10 +45,10 @@ macro_rules! binding_core_impls {
             .args(["-C", path, "fetch", "origin", "--prune", "--quiet"])
             .output();
     }
-    
+
     /// The stateless git helpers.
     pub struct GitImpl;
-    
+
     impl GitCore for GitImpl {
         fn diff_commits(repo_path: String, base: String, head: String, three_dot: bool) -> Result<Vec<FileDiff>> {
             let diffs = $crate::diff_commits(&repo_path, &base, &head, three_dot)?;
@@ -56,31 +64,31 @@ macro_rules! binding_core_impls {
                 })
                 .collect())
         }
-    
+
         fn file_at(repo_path: String, commit: String, path: String) -> Result<Option<String>> {
             $crate::file_at(&repo_path, &commit, &path)
         }
-    
+
         fn branch_exists(repo_path: String, name: String) -> Result<bool> {
             git_fetch_branches(&repo_path);
             $crate::branch_exists(&repo_path, &name)
         }
-    
+
         fn current_branch(repo_path: String) -> Result<String> {
             $crate::current_branch(&repo_path)
         }
-    
+
         fn commit_bodies(repo_path: String, branch: String) -> Result<String> {
             git_fetch_branches(&repo_path);
             $crate::commit_bodies(&repo_path, &branch)
         }
-    
+
         fn ls_remote_heads(repo_path: String, pattern: String) -> Result<Vec<String>> {
             git_fetch_branches(&repo_path);
             $crate::ls_remote_heads(&repo_path, &pattern)
         }
     }
-    
+
     /// An open entl database. `duckdb::Connection` is Send but not Sync, so the
     /// shared handle keeps it behind a Mutex and every heavy call `try_clone()`s a
     /// worker connection (same database) under a brief lock — the generated
@@ -88,14 +96,14 @@ macro_rules! binding_core_impls {
     pub struct EntlImpl {
         pub db: std::sync::Mutex<$crate::Db>,
     }
-    
+
     impl EntlImpl {
         pub fn worker(&self) -> Result<$crate::Db> {
             let db = self.db.lock().expect("entl handle poisoned");
             Ok($crate::Db::from_conn(db.conn.try_clone()?))
         }
     }
-    
+
     fn select_of(
         tables: Option<Vec<String>>,
         exclude: Option<Vec<String>>,
@@ -111,7 +119,7 @@ macro_rules! binding_core_impls {
             schema,
         }
     }
-    
+
     /// Adapt an entl-core change stream to the generated poll contract. The rows
     /// stay columnar — the DTO holds the RecordBatch and each language surfaces
     /// it lazily (IPC getter / PyCapsules), so nothing is encoded here.
@@ -129,7 +137,7 @@ macro_rules! binding_core_impls {
             }
         }
     }
-    
+
     /// Adapt the driver sink's statement stream to the generated poll contract.
     struct PlanStream($crate::StatementStream);
     impl PollStream<Statement> for PlanStream {
@@ -145,14 +153,14 @@ macro_rules! binding_core_impls {
             }
         }
     }
-    
+
     impl EntlCore for EntlImpl {
         fn open(db_path: String) -> Result<Self> {
             let db = $crate::Db::open(&db_path)?;
             db.migrate()?;
             Ok(Self { db: std::sync::Mutex::new(db) })
         }
-    
+
         fn load_git(&self, repo_path: String) -> Result<GitStats> {
             let db = self.worker()?;
             let counter = AtomicU64::new(0);
@@ -163,7 +171,7 @@ macro_rules! binding_core_impls {
                 refs: r.refs as i64,
             })
         }
-    
+
         fn load_github(&self, repo_path: String) -> Result<GithubStats> {
             let db = self.worker()?;
             let r = $crate::ingest_github(&db, &repo_path)?;
@@ -179,7 +187,7 @@ macro_rules! binding_core_impls {
                 users: r.users as i64,
             })
         }
-    
+
         fn query(&self, sql: String) -> Result<String> {
             let db = self.worker()?;
             let wrapped = format!(
@@ -192,7 +200,7 @@ macro_rules! binding_core_impls {
             let db = self.worker()?;
             Ok(db.query_arrow_ipc(&sql)?.into())
         }
-    
+
         fn sink(&self, repo_path: String, options: SinkOptions) -> Result<SinkStats> {
             let db = self.worker()?;
             let target = match options.target {
@@ -224,7 +232,7 @@ macro_rules! binding_core_impls {
                 rows: out.rows as i64,
             })
         }
-    
+
         fn extract(&self, options: ExtractOptions) -> Result<String> {
             let tables = options.tables.unwrap_or_else(|| {
                 $crate::extract::GIT_TABLES.iter().map(|s| s.to_string()).collect()
@@ -232,7 +240,7 @@ macro_rules! binding_core_impls {
             $crate::extract_json(&options.source, &options.path, &tables, options.schema.as_deref())
                 .map_err(Into::into)
         }
-    
+
         fn changes(
             &self,
             repo_path: String,
@@ -255,7 +263,7 @@ macro_rules! binding_core_impls {
             });
             Ok(Box::new(ChangesStream(stream)))
         }
-    
+
         fn driver_plan(&self, options: Option<DriverPlanOptions>) -> Result<Box<dyn PollStream<Statement>>> {
             let o = options.unwrap_or(DriverPlanOptions {
                 tables: None,
@@ -277,7 +285,7 @@ macro_rules! binding_core_impls {
             });
             Ok(Box::new(PlanStream(stream)))
         }
-    
+
         fn rebuild(&self, options: RebuildOptions) -> Result<i64> {
             let refs = $crate::rebuild_store(
                 &options.source,
@@ -288,7 +296,7 @@ macro_rules! binding_core_impls {
             Ok(refs.len() as i64)
         }
     }
-    
+
     /// Shared handle type for the @manual ops in lib.rs.
     pub type SharedCore = Arc<EntlImpl>;
     };

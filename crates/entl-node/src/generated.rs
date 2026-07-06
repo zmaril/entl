@@ -5,11 +5,11 @@
 #![allow(clippy::all)]
 
 // The fixed prelude — generated code uses fully-qualified paths elsewhere.
-use std::sync::Arc;
-use std::time::Duration;
 use napi::bindgen_prelude::{AsyncTask, Result};
 use napi::{Env, Task};
 use napi_derive::napi;
+use std::sync::Arc;
+use std::time::Duration;
 
 fn err(e: impl std::fmt::Display) -> napi::Error {
     napi::Error::from_reason(e.to_string())
@@ -185,7 +185,12 @@ pub struct DriverPlanOptions {
 
 /// The `Git` contract — implement over the engine in `crate::core_impl`.
 pub trait GitCore: Sized + Send + Sync + 'static {
-    fn diff_commits(repo_path: String, base: String, head: String, three_dot: bool) -> anyhow::Result<Vec<FileDiff>>;
+    fn diff_commits(
+        repo_path: String,
+        base: String,
+        head: String,
+        three_dot: bool,
+    ) -> anyhow::Result<Vec<FileDiff>>;
     fn file_at(repo_path: String, commit: String, path: String) -> anyhow::Result<Option<String>>;
     fn branch_exists(repo_path: String, name: String) -> anyhow::Result<bool>;
     fn current_branch(repo_path: String) -> anyhow::Result<String>;
@@ -202,8 +207,15 @@ pub trait EntlCore: Sized + Send + Sync + 'static {
     fn query_arrow(&self, sql: String) -> anyhow::Result<Bytes>;
     fn sink(&self, repo_path: String, options: SinkOptions) -> anyhow::Result<SinkStats>;
     fn extract(&self, options: ExtractOptions) -> anyhow::Result<String>;
-    fn changes(&self, repo_path: String, options: Option<ChangesOptions>) -> anyhow::Result<Box<dyn PollStream<ChangeBatch>>>;
-    fn driver_plan(&self, options: Option<DriverPlanOptions>) -> anyhow::Result<Box<dyn PollStream<Statement>>>;
+    fn changes(
+        &self,
+        repo_path: String,
+        options: Option<ChangesOptions>,
+    ) -> anyhow::Result<Box<dyn PollStream<ChangeBatch>>>;
+    fn driver_plan(
+        &self,
+        options: Option<DriverPlanOptions>,
+    ) -> anyhow::Result<Box<dyn PollStream<Statement>>>;
     fn rebuild(&self, options: RebuildOptions) -> anyhow::Result<i64>;
 }
 
@@ -217,7 +229,13 @@ impl Task for DiffCommitsTask {
     type Output = Vec<FileDiff>;
     type JsValue = Vec<FileDiff>;
     fn compute(&mut self) -> Result<Self::Output> {
-        <crate::core_impl::GitImpl as GitCore>::diff_commits(self.repo_path.clone(), self.base.clone(), self.head.clone(), self.three_dot.clone()).map_err(err)
+        <crate::core_impl::GitImpl as GitCore>::diff_commits(
+            self.repo_path.clone(),
+            self.base.clone(),
+            self.head.clone(),
+            self.three_dot.clone(),
+        )
+        .map_err(err)
     }
     fn resolve(&mut self, _env: Env, o: Self::Output) -> Result<Self::JsValue> {
         Ok(o)
@@ -233,7 +251,12 @@ impl Task for FileAtTask {
     type Output = Option<String>;
     type JsValue = Option<String>;
     fn compute(&mut self) -> Result<Self::Output> {
-        <crate::core_impl::GitImpl as GitCore>::file_at(self.repo_path.clone(), self.commit.clone(), self.path.clone()).map_err(err)
+        <crate::core_impl::GitImpl as GitCore>::file_at(
+            self.repo_path.clone(),
+            self.commit.clone(),
+            self.path.clone(),
+        )
+        .map_err(err)
     }
     fn resolve(&mut self, _env: Env, o: Self::Output) -> Result<Self::JsValue> {
         Ok(o)
@@ -248,7 +271,11 @@ impl Task for BranchExistsTask {
     type Output = bool;
     type JsValue = bool;
     fn compute(&mut self) -> Result<Self::Output> {
-        <crate::core_impl::GitImpl as GitCore>::branch_exists(self.repo_path.clone(), self.name.clone()).map_err(err)
+        <crate::core_impl::GitImpl as GitCore>::branch_exists(
+            self.repo_path.clone(),
+            self.name.clone(),
+        )
+        .map_err(err)
     }
     fn resolve(&mut self, _env: Env, o: Self::Output) -> Result<Self::JsValue> {
         Ok(o)
@@ -277,7 +304,11 @@ impl Task for CommitBodiesTask {
     type Output = String;
     type JsValue = String;
     fn compute(&mut self) -> Result<Self::Output> {
-        <crate::core_impl::GitImpl as GitCore>::commit_bodies(self.repo_path.clone(), self.branch.clone()).map_err(err)
+        <crate::core_impl::GitImpl as GitCore>::commit_bodies(
+            self.repo_path.clone(),
+            self.branch.clone(),
+        )
+        .map_err(err)
     }
     fn resolve(&mut self, _env: Env, o: Self::Output) -> Result<Self::JsValue> {
         Ok(o)
@@ -292,7 +323,11 @@ impl Task for LsRemoteHeadsTask {
     type Output = Vec<String>;
     type JsValue = Vec<String>;
     fn compute(&mut self) -> Result<Self::Output> {
-        <crate::core_impl::GitImpl as GitCore>::ls_remote_heads(self.repo_path.clone(), self.pattern.clone()).map_err(err)
+        <crate::core_impl::GitImpl as GitCore>::ls_remote_heads(
+            self.repo_path.clone(),
+            self.pattern.clone(),
+        )
+        .map_err(err)
     }
     fn resolve(&mut self, _env: Env, o: Self::Output) -> Result<Self::JsValue> {
         Ok(o)
@@ -301,14 +336,28 @@ impl Task for LsRemoteHeadsTask {
 
 /// Diff two commits (`base...head` when threeDot).
 #[napi(ts_return_type = "Promise<FileDiff[]>")]
-pub fn diff_commits(repo_path: String, base: String, head: String, three_dot: bool) -> AsyncTask<DiffCommitsTask> {
-    AsyncTask::new(DiffCommitsTask { repo_path, base, head, three_dot })
+pub fn diff_commits(
+    repo_path: String,
+    base: String,
+    head: String,
+    three_dot: bool,
+) -> AsyncTask<DiffCommitsTask> {
+    AsyncTask::new(DiffCommitsTask {
+        repo_path,
+        base,
+        head,
+        three_dot,
+    })
 }
 
 /// A file's content at a commit — null when absent or binary.
 #[napi(ts_return_type = "Promise<string | null>")]
 pub fn file_at(repo_path: String, commit: String, path: String) -> AsyncTask<FileAtTask> {
-    AsyncTask::new(FileAtTask { repo_path, commit, path })
+    AsyncTask::new(FileAtTask {
+        repo_path,
+        commit,
+        path,
+    })
 }
 
 #[napi(ts_return_type = "Promise<boolean>")]
@@ -361,7 +410,9 @@ impl Task for NextChangesTask {
 impl Changes {
     #[napi(ts_return_type = "Promise<ChangeBatch | null>")]
     pub fn next(&self) -> AsyncTask<NextChangesTask> {
-        AsyncTask::new(NextChangesTask { stream: self.stream.clone() })
+        AsyncTask::new(NextChangesTask {
+            stream: self.stream.clone(),
+        })
     }
 }
 
@@ -393,7 +444,9 @@ impl Task for NextDriverPlanTask {
 impl DriverPlan {
     #[napi(ts_return_type = "Promise<Statement | null>")]
     pub fn next(&self) -> AsyncTask<NextDriverPlanTask> {
-        AsyncTask::new(NextDriverPlanTask { stream: self.stream.clone() })
+        AsyncTask::new(NextDriverPlanTask {
+            stream: self.stream.clone(),
+        })
     }
 }
 
@@ -466,7 +519,9 @@ impl Task for SinkTask {
     type Output = SinkStats;
     type JsValue = SinkStats;
     fn compute(&mut self) -> Result<Self::Output> {
-        self.core.sink(self.repo_path.clone(), self.options.clone()).map_err(err)
+        self.core
+            .sink(self.repo_path.clone(), self.options.clone())
+            .map_err(err)
     }
     fn resolve(&mut self, _env: Env, o: Self::Output) -> Result<Self::JsValue> {
         Ok(o)
@@ -515,53 +570,81 @@ impl Entl {
     /// Open (or create) the .duckdb at `dbPath` and apply the schema.
     #[napi(constructor)]
     pub fn new(db_path: String) -> Result<Self> {
-        Ok(Self { core: Arc::new(<crate::core_impl::EntlImpl as EntlCore>::open(db_path).map_err(err)?) })
+        Ok(Self {
+            core: Arc::new(<crate::core_impl::EntlImpl as EntlCore>::open(db_path).map_err(err)?),
+        })
     }
     /// Load git history from `repoPath` (one-way, incremental).
     #[napi(ts_return_type = "Promise<GitStats>")]
     pub fn load_git(&self, repo_path: String) -> AsyncTask<LoadGitTask> {
-        AsyncTask::new(LoadGitTask { core: self.core.clone(), repo_path })
+        AsyncTask::new(LoadGitTask {
+            core: self.core.clone(),
+            repo_path,
+        })
     }
     /// Load GitHub data (events/PRs/issues/Actions). Needs a token.
     #[napi(ts_return_type = "Promise<GithubStats>")]
     pub fn load_github(&self, repo_path: String) -> AsyncTask<LoadGithubTask> {
-        AsyncTask::new(LoadGithubTask { core: self.core.clone(), repo_path })
+        AsyncTask::new(LoadGithubTask {
+            core: self.core.clone(),
+            repo_path,
+        })
     }
     /// Run a SQL query; JSON rows back.
     #[napi(ts_return_type = "Promise<string>")]
     pub fn query(&self, sql: String) -> AsyncTask<QueryTask> {
-        AsyncTask::new(QueryTask { core: self.core.clone(), sql })
+        AsyncTask::new(QueryTask {
+            core: self.core.clone(),
+            sql,
+        })
     }
     /// Run a SQL query; the result as one Arrow IPC stream (schema + all batches) —
     /// the dataframe on-ramp (pyarrow → pandas/polars, apache-arrow JS, red-arrow).
     #[napi(ts_return_type = "Promise<Buffer>")]
     pub fn query_arrow(&self, sql: String) -> AsyncTask<QueryArrowTask> {
-        AsyncTask::new(QueryArrowTask { core: self.core.clone(), sql })
+        AsyncTask::new(QueryArrowTask {
+            core: self.core.clone(),
+            sql,
+        })
     }
     /// Pull `repoPath` and sync it into a target store, in one call.
     #[napi(ts_return_type = "Promise<SinkStats>")]
     pub fn sink(&self, repo_path: String, options: SinkOptions) -> AsyncTask<SinkTask> {
-        AsyncTask::new(SinkTask { core: self.core.clone(), repo_path, options })
+        AsyncTask::new(SinkTask {
+            core: self.core.clone(),
+            repo_path,
+            options,
+        })
     }
     /// Read a store back into canonical rows (JSON; oids hex, timestamps RFC3339).
     #[napi(ts_return_type = "Promise<string>")]
     pub fn extract(&self, options: ExtractOptions) -> AsyncTask<ExtractTask> {
-        AsyncTask::new(ExtractTask { core: self.core.clone(), options })
+        AsyncTask::new(ExtractTask {
+            core: self.core.clone(),
+            options,
+        })
     }
     /// Stream the change batches from one pull (the stream plane).
     #[napi]
     pub fn changes(&self, repo_path: String, options: Option<ChangesOptions>) -> Result<Changes> {
-        Ok(Changes { stream: Arc::from(self.core.changes(repo_path, options).map_err(err)?) })
+        Ok(Changes {
+            stream: Arc::from(self.core.changes(repo_path, options).map_err(err)?),
+        })
     }
     /// Backfill this store into a driver target: stream {sql, params} for the host to execute.
     #[napi]
     pub fn driver_plan(&self, options: Option<DriverPlanOptions>) -> Result<DriverPlan> {
-        Ok(DriverPlan { stream: Arc::from(self.core.driver_plan(options).map_err(err)?) })
+        Ok(DriverPlan {
+            stream: Arc::from(self.core.driver_plan(options).map_err(err)?),
+        })
     }
     /// Reconstruct a git repo from a store (needs objects: true at sink time). Returns commits rebuilt.
     #[napi(ts_return_type = "Promise<number>")]
     pub fn rebuild(&self, options: RebuildOptions) -> AsyncTask<RebuildTask> {
-        AsyncTask::new(RebuildTask { core: self.core.clone(), options })
+        AsyncTask::new(RebuildTask {
+            core: self.core.clone(),
+            options,
+        })
     }
     // @manual: watch — hand-written in lib.rs.
 }

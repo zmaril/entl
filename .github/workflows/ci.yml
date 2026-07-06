@@ -63,6 +63,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust-setup
+      # lint gates first (fmt is instant; clippy warms the test build below)
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets -- -D warnings
       # default members: entl-core, entl-cli, fluessig (incl. the drift guards
       # over every committed generated artifact)
       - run: cargo test

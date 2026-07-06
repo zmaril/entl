@@ -47,7 +47,9 @@ impl FromStr for SinkTarget {
             "sqlite" => Ok(SinkTarget::Sqlite),
             "jsonl" => Ok(SinkTarget::Jsonl),
             "postgres" | "postgresql" | "pg" => Ok(SinkTarget::Postgres),
-            other => Err(anyhow!("unknown sink target: {other} (expected sqlite | jsonl | postgres)")),
+            other => Err(anyhow!(
+                "unknown sink target: {other} (expected sqlite | jsonl | postgres)"
+            )),
         }
     }
 }
@@ -55,7 +57,11 @@ impl FromStr for SinkTarget {
 /// Build a boxed sink for `target`. `path` is the SQLite file, the JSONL directory, or the
 /// Postgres connection URL — required for all. `select` narrows the tables written (and, for
 /// Postgres, the target schema).
-pub fn build_sink(target: SinkTarget, path: Option<&str>, select: SinkSelect) -> Result<Box<dyn Sink + Send>> {
+pub fn build_sink(
+    target: SinkTarget,
+    path: Option<&str>,
+    select: SinkSelect,
+) -> Result<Box<dyn Sink + Send>> {
     let path = path.ok_or_else(|| anyhow!("sink target {} needs a path/url", target.as_str()))?;
     Ok(match target {
         SinkTarget::Sqlite => Box::new(SqliteSink::open(path, select)?),
@@ -75,7 +81,10 @@ pub struct PullOpts {
 
 impl Default for PullOpts {
     fn default() -> Self {
-        Self { github: true, objects: false }
+        Self {
+            github: true,
+            objects: false,
+        }
     }
 }
 
@@ -95,7 +104,12 @@ pub struct SinkOutcome {
 /// Git is required; GitHub is attempted when `opts.github` and its error propagates (same
 /// contract as loading git + github separately). `db` may be an in-memory DuckDB if the caller
 /// only wants the target sink.
-pub fn pull_into(db: &Db, repo: &str, sink: Box<dyn Sink + Send>, opts: PullOpts) -> Result<SinkOutcome> {
+pub fn pull_into(
+    db: &Db,
+    repo: &str,
+    sink: Box<dyn Sink + Send>,
+    opts: PullOpts,
+) -> Result<SinkOutcome> {
     let (csink, stream) = change_channel(512);
 
     // Consumer owns the sink; it drains until the producer drops `csink` (channel closes).

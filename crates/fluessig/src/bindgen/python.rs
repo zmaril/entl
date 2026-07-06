@@ -44,12 +44,20 @@ fn py_flatten(api: &ApiDoc, op: &ApiOp) -> Vec<PyParam> {
             _ => None,
         };
         if let Some(model) = model_name {
-            let m = api.models.iter().find(|m| m.name == model).expect("model in api.json");
+            let m = api
+                .models
+                .iter()
+                .find(|m| m.name == model)
+                .expect("model in api.json");
             for f in &m.fields {
                 let (r, _) = ty(api, &f.ty);
                 out.push(PyParam {
                     name: py_reserved(&snake(&f.name)),
-                    rust_ty: if f.nullable { format!("Option<{r}>") } else { r },
+                    rust_ty: if f.nullable {
+                        format!("Option<{r}>")
+                    } else {
+                        r
+                    },
                     defaulted: f.nullable,
                     group: Some(model.clone()),
                 });
@@ -74,11 +82,20 @@ fn py_op_pieces(api: &ApiDoc, op: &ApiOp) -> (String, String, String, String) {
     let flat = py_flatten(api, op);
     let signature = flat
         .iter()
-        .map(|p| if p.defaulted { format!("{}=None", p.name) } else { p.name.clone() })
+        .map(|p| {
+            if p.defaulted {
+                format!("{}=None", p.name)
+            } else {
+                p.name.clone()
+            }
+        })
         .collect::<Vec<_>>()
         .join(", ");
-    let fn_params =
-        flat.iter().map(|p| format!("{}: {}", p.name, p.rust_ty)).collect::<Vec<_>>().join(", ");
+    let fn_params = flat
+        .iter()
+        .map(|p| format!("{}: {}", p.name, p.rust_ty))
+        .collect::<Vec<_>>()
+        .join(", ");
     // group reassembly, in first-appearance order
     let mut prelude = String::new();
     let mut seen = Vec::new();
@@ -101,7 +118,11 @@ fn py_op_pieces(api: &ApiDoc, op: &ApiOp) -> (String, String, String, String) {
                     .find(|f| py_reserved(&snake(&f.name)) == p.name)
                     .map(|f| snake(&f.name))
                     .unwrap_or_else(|| p.name.clone());
-                if orig == p.name { orig } else { format!("{orig}: {}", p.name) }
+                if orig == p.name {
+                    orig
+                } else {
+                    format!("{orig}: {}", p.name)
+                }
             })
             .collect();
         prelude.push_str(&format!(
@@ -218,7 +239,11 @@ fn emit_py_arrow_model(
 /// Generate the PyO3 (Python) binding: pyclass DTOs + enums, the core traits,
 /// `#[pyfunction]`s with the GIL released, kwargs-flattened methods, iterator
 /// stream classes, and a `register()` for the `#[pymodule]`.
-pub fn python_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note: Option<&str>) -> String {
+pub fn python_binding(
+    api: &ApiDoc,
+    enums: &[(String, Vec<String>)],
+    banner_note: Option<&str>,
+) -> String {
     let mut t: rust::Tokens = quote! {
         use std::sync::Arc;
         use std::time::Duration;
@@ -283,7 +308,11 @@ pub fn python_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note
             .iter()
             .map(|f| {
                 let (r, _) = ty(api, &f.ty);
-                let r = if f.nullable { format!("Option<{r}>") } else { r };
+                let r = if f.nullable {
+                    format!("Option<{r}>")
+                } else {
+                    r
+                };
                 let n = py_reserved(&snake(&f.name));
                 quote!(pub $n: $r,)
             })
@@ -299,7 +328,11 @@ pub fn python_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note
             .iter()
             .map(|f| {
                 let n = py_reserved(&snake(&f.name));
-                if f.nullable { format!("{n}=None") } else { n }
+                if f.nullable {
+                    format!("{n}=None")
+                } else {
+                    n
+                }
             })
             .collect::<Vec<_>>()
             .join(", ");
@@ -307,7 +340,11 @@ pub fn python_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note
             .iter()
             .map(|f| {
                 let (r, _) = ty(api, &f.ty);
-                let r = if f.nullable { format!("Option<{r}>") } else { r };
+                let r = if f.nullable {
+                    format!("Option<{r}>")
+                } else {
+                    r
+                };
                 format!("{}: {}", py_reserved(&snake(&f.name)), r)
             })
             .collect::<Vec<_>>()
@@ -480,7 +517,11 @@ pub fn python_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note
     let adds: Vec<String> = class_names
         .iter()
         .map(|c| format!("m.add_class::<{c}>()?;"))
-        .chain(fn_names.iter().map(|f| format!("m.add_function(wrap_pyfunction!({f}, m)?)?;")))
+        .chain(
+            fn_names
+                .iter()
+                .map(|f| format!("m.add_function(wrap_pyfunction!({f}, m)?)?;")),
+        )
         .collect();
     quote_in! { t =>
         $['\r']
@@ -492,9 +533,8 @@ pub fn python_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note
     };
 
     let body = t.to_file_string().expect("rust renders");
-    format!(
+    crate::rustfmt::format(format!(
         "//! GENERATED by fluessig bindgen from crates/fluessig/entl.tsp (api layer). Do not edit.\n//! Regenerate: `bun run gen` in crates/entl-node. Hand-written half: crate::core_impl.\n{}#![allow(clippy::all)]\n\n{body}",
         note_line(banner_note)
-    )
+    ))
 }
-

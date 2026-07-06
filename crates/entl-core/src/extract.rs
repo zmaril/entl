@@ -27,14 +27,30 @@ pub const OBJ_TABLES: &[&str] = &["blobs", "trees", "tree_entries"];
 
 /// Git metadata + objects — the full set needed to reconstruct a repo.
 pub const GIT_FULL_TABLES: &[&str] = &[
-    "commits", "commit_parents", "file_changes", "refs", "blobs", "trees", "tree_entries",
+    "commits",
+    "commit_parents",
+    "file_changes",
+    "refs",
+    "blobs",
+    "trees",
+    "tree_entries",
 ];
 
 /// The forge tables the ingest writes that have sink templates (GraphQL-derived + events).
 pub const FORGE_TABLES: &[&str] = &[
-    "gh_pull_requests", "gh_issues", "gh_events", "gh_comments", "gh_labeled", "gh_labels",
-    "gh_pr_reviews", "gh_pr_commits", "gh_requested_reviewers", "gh_review_comments", "gh_users",
-    "gh_workflow_runs", "gh_check_runs",
+    "gh_pull_requests",
+    "gh_issues",
+    "gh_events",
+    "gh_comments",
+    "gh_labeled",
+    "gh_labels",
+    "gh_pr_reviews",
+    "gh_pr_commits",
+    "gh_requested_reviewers",
+    "gh_review_comments",
+    "gh_users",
+    "gh_workflow_runs",
+    "gh_check_runs",
 ];
 
 fn hex(bytes: &[u8]) -> String {
@@ -57,13 +73,21 @@ fn sort_rows(rows: &mut [Row]) {
 pub use crate::schema_gen::BOOL_COLUMNS;
 
 fn static_bool_columns() -> HashSet<(String, String)> {
-    BOOL_COLUMNS.iter().map(|(t, c)| (t.to_string(), c.to_string())).collect()
+    BOOL_COLUMNS
+        .iter()
+        .map(|(t, c)| (t.to_string(), c.to_string()))
+        .collect()
 }
 
 /// Extract a canonical snapshot from any store and serialize it to deterministic JSON — the shared
 /// read surface the language bindings expose (`entl.extract`). `source` is
 /// `duckdb` | `sqlite` | `jsonl` | `postgres`; `schema` applies to Postgres (default `entl`).
-pub fn extract_json(source: &str, dest: &str, tables: &[String], schema: Option<&str>) -> Result<String> {
+pub fn extract_json(
+    source: &str,
+    dest: &str,
+    tables: &[String],
+    schema: Option<&str>,
+) -> Result<String> {
     let trefs: Vec<&str> = tables.iter().map(String::as_str).collect();
     let snap = match source {
         "duckdb" => {
@@ -72,7 +96,9 @@ pub fn extract_json(source: &str, dest: &str, tables: &[String], schema: Option<
         }
         "sqlite" => extract_sqlite(dest, &trefs, &static_bool_columns())?,
         "jsonl" => extract_jsonl(dest, &trefs)?,
-        "postgres" | "postgresql" | "pg" => extract_postgres(dest, schema.unwrap_or("entl"), &trefs)?,
+        "postgres" | "postgresql" | "pg" => {
+            extract_postgres(dest, schema.unwrap_or("entl"), &trefs)?
+        }
         other => anyhow::bail!("unknown extract source: {other} (duckdb|sqlite|jsonl|postgres)"),
     };
     Ok(serde_json::to_string(&snap)?)
@@ -99,7 +125,8 @@ pub fn extract_duckdb(conn: &duckdb::Connection, tables: &[&str]) -> Result<Snap
             continue;
         }
         let mut stmt = conn.prepare(&format!("SELECT * FROM \"{t}\""))?;
-        let batches: Vec<duckdb::arrow::record_batch::RecordBatch> = stmt.query_arrow([])?.collect();
+        let batches: Vec<duckdb::arrow::record_batch::RecordBatch> =
+            stmt.query_arrow([])?.collect();
         let mut rows = Vec::new();
         for batch in &batches {
             let schema = batch.schema();
@@ -118,9 +145,8 @@ pub fn extract_duckdb(conn: &duckdb::Connection, tables: &[&str]) -> Result<Snap
 }
 
 fn table_set(conn: &duckdb::Connection) -> Result<HashSet<String>> {
-    let mut stmt = conn.prepare(
-        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'",
-    )?;
+    let mut stmt = conn
+        .prepare("SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'")?;
     let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
     Ok(rows.collect::<duckdb::Result<_>>()?)
 }
@@ -199,11 +225,11 @@ pub fn extract_postgres(url: &str, schema: &str, tables: &[&str]) -> Result<Snap
             for (i, col) in pr.columns().iter().enumerate() {
                 let v = match *col.type_() {
                     Type::BOOL => opt(pr.get::<_, Option<bool>>(i), Value::Bool),
-                    Type::INT2 => opt(pr.get::<_, Option<i16>>(i), |n| Value::from(n)),
-                    Type::INT4 => opt(pr.get::<_, Option<i32>>(i), |n| Value::from(n)),
-                    Type::INT8 => opt(pr.get::<_, Option<i64>>(i), |n| Value::from(n)),
-                    Type::FLOAT4 => opt(pr.get::<_, Option<f32>>(i), |n| Value::from(n)),
-                    Type::FLOAT8 => opt(pr.get::<_, Option<f64>>(i), |n| Value::from(n)),
+                    Type::INT2 => opt(pr.get::<_, Option<i16>>(i), Value::from),
+                    Type::INT4 => opt(pr.get::<_, Option<i32>>(i), Value::from),
+                    Type::INT8 => opt(pr.get::<_, Option<i64>>(i), Value::from),
+                    Type::FLOAT4 => opt(pr.get::<_, Option<f32>>(i), Value::from),
+                    Type::FLOAT8 => opt(pr.get::<_, Option<f64>>(i), Value::from),
                     Type::TIMESTAMPTZ => opt(pr.get::<_, Option<DateTime<Utc>>>(i), |dt| {
                         Value::String(dt.to_rfc3339())
                     }),

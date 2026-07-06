@@ -77,16 +77,25 @@ pub struct ApiParam {
 #[serde(untagged, deny_unknown_fields)]
 pub enum ApiType {
     Scalar(String),
-    Model { model: String },
-    Enum { r#enum: String },
-    List { list: Box<ApiType> },
+    Model {
+        model: String,
+    },
+    Enum {
+        r#enum: String,
+    },
+    List {
+        list: Box<ApiType>,
+    },
     /// `T | null` — nullable returns/params.
-    Nullable { nullable: Box<ApiType> },
+    Nullable {
+        nullable: Box<ApiType>,
+    },
 }
 
 /// Parse `api.json` (with the same format-version gate as the catalog).
 pub fn load_api(json: &str) -> Result<ApiDoc, String> {
-    let api: ApiDoc = serde_json::from_str(json).map_err(|e| format!("api.json parse error: {e}"))?;
+    let api: ApiDoc =
+        serde_json::from_str(json).map_err(|e| format!("api.json parse error: {e}"))?;
     if api.fluessig.format != crate::FORMAT_VERSION {
         return Err(format!(
             "api format {} is not supported (this fluessig reads format {})",

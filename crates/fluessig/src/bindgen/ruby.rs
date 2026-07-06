@@ -47,7 +47,10 @@ struct RbParam {
     parse_enum: Option<String>,
 }
 
-fn rb_flatten(api: &ApiDoc, op: &ApiOp) -> (Vec<RbParam>, Vec<(String, String, Vec<String>)>) {
+/// A flattened group: (model, var, skipped-fields).
+type RbGroup = (String, String, Vec<String>);
+
+fn rb_flatten(api: &ApiDoc, op: &ApiOp) -> (Vec<RbParam>, Vec<RbGroup>) {
     // returns (params, groups: (model, var, skipped-fields))
     let mut params = Vec::new();
     let mut groups = Vec::new();
@@ -57,7 +60,11 @@ fn rb_flatten(api: &ApiDoc, op: &ApiOp) -> (Vec<RbParam>, Vec<(String, String, V
             _ => None,
         };
         if let Some(model) = model_name {
-            let m = api.models.iter().find(|m| m.name == model).expect("model in api.json");
+            let m = api
+                .models
+                .iter()
+                .find(|m| m.name == model)
+                .expect("model in api.json");
             let mut skipped = Vec::new();
             for f in &m.fields {
                 let is_input_model = match &f.ty {
@@ -77,7 +84,11 @@ fn rb_flatten(api: &ApiDoc, op: &ApiOp) -> (Vec<RbParam>, Vec<(String, String, V
                 };
                 params.push(RbParam {
                     name: snake(&f.name),
-                    rust_ty: if f.nullable { format!("Option<{base_ty}>") } else { base_ty },
+                    rust_ty: if f.nullable {
+                        format!("Option<{base_ty}>")
+                    } else {
+                        base_ty
+                    },
                     optional: f.nullable,
                     group: Some(model.clone()),
                     field: Some(snake(&f.name)),
@@ -121,27 +132,54 @@ fn rb_op_pieces(api: &ApiDoc, op: &ApiOp) -> RbPieces {
     let fn_params = if has_optional {
         "args: &[magnus::Value]".to_string()
     } else {
-        flat.iter().map(|p| format!("{}: {}", p.name, p.rust_ty)).collect::<Vec<_>>().join(", ")
+        flat.iter()
+            .map(|p| format!("{}: {}", p.name, p.rust_ty))
+            .collect::<Vec<_>>()
+            .join(", ")
     };
     let arity: i64 = if has_optional { -1 } else { flat.len() as i64 };
     let scan = if has_optional {
         let req: Vec<&RbParam> = flat.iter().filter(|p| !p.optional).collect();
         let opt: Vec<&RbParam> = flat.iter().filter(|p| p.optional).collect();
-        let req_tys = req.iter().map(|p| p.rust_ty.clone()).collect::<Vec<_>>().join(", ");
-        let opt_tys = opt.iter().map(|p| p.rust_ty.clone()).collect::<Vec<_>>().join(", ");
-        let req_names = req.iter().map(|p| p.name.clone()).collect::<Vec<_>>().join(", ");
-        let opt_names = opt.iter().map(|p| p.name.clone()).collect::<Vec<_>>().join(", ");
-        let req_tuple = if req.is_empty() { "()".to_string() } else { format!("({req_tys},)") };
+        let req_tys = req
+            .iter()
+            .map(|p| p.rust_ty.clone())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let opt_tys = opt
+            .iter()
+            .map(|p| p.rust_ty.clone())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let req_names = req
+            .iter()
+            .map(|p| p.name.clone())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let opt_names = opt
+            .iter()
+            .map(|p| p.name.clone())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let req_tuple = if req.is_empty() {
+            "()".to_string()
+        } else {
+            format!("({req_tys},)")
+        };
         let mut out = format!(
             "let a = magnus::scan_args::scan_args::<{req_tuple}, ({opt_tys},), (), (), (), ()>(args)?;
 "
         );
         if !req.is_empty() {
-            out.push_str(&format!("let ({req_names},) = a.required;
-"));
+            out.push_str(&format!(
+                "let ({req_names},) = a.required;
+"
+            ));
         }
-        out.push_str(&format!("let ({opt_names},) = a.optional;
-"));
+        out.push_str(&format!(
+            "let ({opt_names},) = a.optional;
+"
+        ));
         Some(out)
     } else {
         None
@@ -149,7 +187,10 @@ fn rb_op_pieces(api: &ApiDoc, op: &ApiOp) -> RbPieces {
     let mut prelude = String::new();
     for p in flat.iter().filter(|p| p.parse_enum.is_some()) {
         let e = p.parse_enum.as_ref().unwrap();
-        prelude.push_str(&format!("let {n} = {e}::parse(&{n}).map_err(rberr)?;\n", n = p.name));
+        prelude.push_str(&format!(
+            "let {n} = {e}::parse(&{n}).map_err(rberr)?;\n",
+            n = p.name
+        ));
     }
     for (model, var, skipped) in &groups {
         let mut fields: Vec<String> = flat
@@ -158,7 +199,10 @@ fn rb_op_pieces(api: &ApiDoc, op: &ApiOp) -> RbPieces {
             .map(|p| p.field.clone().unwrap())
             .collect();
         fields.extend(skipped.iter().map(|f| format!("{f}: None")));
-        prelude.push_str(&format!("let {var} = {model} {{ {} }};\n", fields.join(", ")));
+        prelude.push_str(&format!(
+            "let {var} = {model} {{ {} }};\n",
+            fields.join(", ")
+        ));
     }
     let args = op
         .params
@@ -166,19 +210,33 @@ fn rb_op_pieces(api: &ApiDoc, op: &ApiOp) -> RbPieces {
         .map(|p| match &p.ty {
             ApiType::Model { model } => {
                 let var = format!("{}_arg", snake(model));
-                if p.optional == Some(true) { format!("Some({var})") } else { var }
+                if p.optional == Some(true) {
+                    format!("Some({var})")
+                } else {
+                    var
+                }
             }
             _ => snake(&p.name),
         })
         .collect::<Vec<_>>()
         .join(", ");
-    RbPieces { fn_params, arity, prelude, args, scan }
+    RbPieces {
+        fn_params,
+        arity,
+        prelude,
+        args,
+        scan,
+    }
 }
 
 /// Generate the Magnus (Ruby) binding: plain-Rust DTOs + enums (with parse),
 /// wrapped output classes with getters, GVL-plain methods with trailing
 /// optionals, `.next`-nil streams, and a `register()` for `#[magnus::init]`.
-pub fn ruby_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note: Option<&str>) -> String {
+pub fn ruby_binding(
+    api: &ApiDoc,
+    enums: &[(String, Vec<String>)],
+    banner_note: Option<&str>,
+) -> String {
     let outputs = output_models(api);
     let mut t: rust::Tokens = quote! {
         use std::sync::Arc;
@@ -221,7 +279,11 @@ pub fn ruby_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note: 
             .iter()
             .map(|v| format!("{:?} => Ok(Self::{}),", v.to_lowercase(), pascal(v)))
             .collect();
-        let expect = variants.iter().map(|v| v.to_lowercase()).collect::<Vec<_>>().join(" | ");
+        let expect = variants
+            .iter()
+            .map(|v| v.to_lowercase())
+            .collect::<Vec<_>>()
+            .join(" | ");
         quote_in! { t =>
             $['\n']
             #[derive(Clone, Copy, PartialEq)]
@@ -299,7 +361,11 @@ pub fn ruby_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note: 
             .iter()
             .map(|f| {
                 let (r, _) = ty(api, &f.ty);
-                let r = if f.nullable { format!("Option<{r}>") } else { r };
+                let r = if f.nullable {
+                    format!("Option<{r}>")
+                } else {
+                    r
+                };
                 let n = snake(&f.name);
                 quote!(pub $n: $r,)
             })
@@ -310,7 +376,11 @@ pub fn ruby_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note: 
                 .iter()
                 .map(|f| {
                     let (r, _) = ty(api, &f.ty);
-                    let r = if f.nullable { format!("Option<{r}>") } else { r };
+                    let r = if f.nullable {
+                        format!("Option<{r}>")
+                    } else {
+                        r
+                    };
                     let n = snake(&f.name);
                     quote! {
                         fn get_$(&n)(&self) -> $r {
@@ -374,7 +444,9 @@ pub fn ruby_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note: 
             registrations.push(format!(
                 "let s = class.define_class({class:?}, ruby.class_object())?;"
             ));
-            registrations.push(format!("s.define_method(\"next\", method!({class}::next, 0))?;"));
+            registrations.push(format!(
+                "s.define_method(\"next\", method!({class}::next, 0))?;"
+            ));
             quote_in! { t =>
                 $['\r']
                 $(format!("/// Poll-based stream from `{}.{}` — `.next` returns the next item or nil.", i.name, op.name))
@@ -553,8 +625,8 @@ pub fn ruby_binding(api: &ApiDoc, enums: &[(String, Vec<String>)], banner_note: 
     };
 
     let body = t.to_file_string().expect("rust renders");
-    format!(
+    crate::rustfmt::format(format!(
         "//! GENERATED by fluessig bindgen from crates/fluessig/entl.tsp (api layer). Do not edit.\n//! Regenerate: `bun run gen` in crates/entl-node. Hand-written half: crate::core_impl.\n//! Ruby surface notes: options bags are flattened to trailing OPTIONAL POSITIONAL args\n//! (kwargs are a follow-up); enum params are lowercase strings; input-model fields\n//! (e.g. sink's `rename`) are not exposed yet.\n{}#![allow(clippy::all)]\n\n{body}",
         note_line(banner_note)
-    )
+    ))
 }

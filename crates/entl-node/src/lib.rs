@@ -45,8 +45,12 @@ fn git_fetch(path: &str) {
         .output();
     let _ = std::process::Command::new("git")
         .args([
-            "-C", path, "fetch", "origin",
-            "+refs/pull/*/head:refs/remotes/origin/pull/*", "--quiet",
+            "-C",
+            path,
+            "fetch",
+            "origin",
+            "+refs/pull/*/head:refs/remotes/origin/pull/*",
+            "--quiet",
         ])
         .output();
 }

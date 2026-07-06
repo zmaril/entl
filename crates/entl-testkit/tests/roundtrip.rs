@@ -23,7 +23,16 @@ fn pull(repo: &str, target: SinkTarget, dest: &str, sel: SinkSelect) -> (Db, ent
     let db = Db::open(":memory:").unwrap();
     db.migrate().unwrap();
     let sink = build_sink(target, Some(dest), sel).unwrap();
-    pull_into(&db, repo, sink, PullOpts { github: false, objects: false }).unwrap();
+    pull_into(
+        &db,
+        repo,
+        sink,
+        PullOpts {
+            github: false,
+            objects: false,
+        },
+    )
+    .unwrap();
     let s0 = extract_duckdb(&db.conn, GIT_TABLES).unwrap();
     (db, s0)
 }
@@ -74,18 +83,30 @@ proptest! {
 
 /// Branch/tag tips as `refname → oid`, sorted (byte-identical if reconstruction is faithful).
 fn refs_of(repo: &Path) -> String {
-    let mut v: Vec<String> = git(repo, &["for-each-ref", "--format=%(refname) %(objectname)", "refs/heads", "refs/tags"])
-        .unwrap()
-        .lines()
-        .map(str::to_string)
-        .collect();
+    let mut v: Vec<String> = git(
+        repo,
+        &[
+            "for-each-ref",
+            "--format=%(refname) %(objectname)",
+            "refs/heads",
+            "refs/tags",
+        ],
+    )
+    .unwrap()
+    .lines()
+    .map(str::to_string)
+    .collect();
     v.sort();
     v.join("\n")
 }
 
 /// The set of all reachable commit OIDs, sorted.
 fn commits_of(repo: &Path) -> String {
-    let mut v: Vec<String> = git(repo, &["rev-list", "--all"]).unwrap().lines().map(str::to_string).collect();
+    let mut v: Vec<String> = git(repo, &["rev-list", "--all"])
+        .unwrap()
+        .lines()
+        .map(str::to_string)
+        .collect();
     v.sort();
     v.join("\n")
 }

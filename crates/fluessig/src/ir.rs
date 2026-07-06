@@ -63,7 +63,11 @@ pub struct Entity {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub table: Option<String>,
-    #[serde(rename = "abstract", default, skip_serializing_if = "std::ops::Not::not")]
+    #[serde(
+        rename = "abstract",
+        default,
+        skip_serializing_if = "std::ops::Not::not"
+    )]
     pub is_abstract: bool,
     #[serde(rename = "extends", default, skip_serializing_if = "Option::is_none")]
     pub extends: Option<String>,
@@ -136,9 +140,16 @@ pub enum TypeRef {
         base: Option<String>,
     },
     /// A model reference; `entity: true` ⇒ a relation target, `false` ⇒ a value struct.
-    Ref { name: String, entity: bool },
-    Enum { name: String },
-    List { of: Box<TypeRef> },
+    Ref {
+        name: String,
+        entity: bool,
+    },
+    Enum {
+        name: String,
+    },
+    List {
+        of: Box<TypeRef>,
+    },
 }
 
 impl TypeRef {
@@ -229,7 +240,7 @@ impl Catalog {
 
     /// The physical table name: `@name` override, else the model name as-is
     /// snake_cased (the dumb rule — DESIGN §3 "Naming").
-    pub fn table_name<'a>(&self, entity: &'a Entity) -> String {
+    pub fn table_name(&self, entity: &Entity) -> String {
         entity.table.clone().unwrap_or_else(|| snake(&entity.name))
     }
 }

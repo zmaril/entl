@@ -3,23 +3,38 @@
 //!
 //!   cargo run -p entl-core --example roundtrip_check -- /path/to/repo
 //!   ENTL_TEST_PG=postgres://... cargo run -p entl-core --example roundtrip_check -- /path/to/repo
+//!
+//! straitjacket-allow-file:duplication — the example harnesses share ingest +
+//! snapshot setup boilerplate by design.
 
-use entl_core::extract::{bool_columns, extract_duckdb, extract_jsonl, extract_postgres, extract_sqlite, diff, GIT_FULL_TABLES};
+use entl_core::extract::{
+    bool_columns, diff, extract_duckdb, extract_jsonl, extract_postgres, extract_sqlite,
+    GIT_FULL_TABLES,
+};
 use entl_core::{build_sink, pull_into, Db, PullOpts, SinkSelect, SinkTarget};
 
 fn main() -> anyhow::Result<()> {
-    let repo = std::env::args().nth(1).expect("usage: roundtrip_check <repo>");
+    let repo = std::env::args()
+        .nth(1)
+        .expect("usage: roundtrip_check <repo>");
     let tmp = std::env::var("CLAUDE_JOB_DIR").unwrap_or_else(|_| "/tmp".into()) + "/tmp";
     std::fs::create_dir_all(&tmp).ok();
 
-    let opts = || PullOpts { github: false, objects: true };
+    let opts = || PullOpts {
+        github: false,
+        objects: true,
+    };
 
     // --- SQLite ---
     let sqlite_path = format!("{tmp}/rt_check.sqlite");
     let _ = std::fs::remove_file(&sqlite_path);
     let db = Db::open(":memory:")?;
     db.migrate()?;
-    let sink = build_sink(SinkTarget::Sqlite, Some(&sqlite_path), SinkSelect::default())?;
+    let sink = build_sink(
+        SinkTarget::Sqlite,
+        Some(&sqlite_path),
+        SinkSelect::default(),
+    )?;
     pull_into(&db, &repo, sink, opts())?;
     let s0 = extract_duckdb(&db.conn, GIT_FULL_TABLES)?;
     let bcols = bool_columns(&db.conn)?;
@@ -41,9 +56,11 @@ fn main() -> anyhow::Result<()> {
     if let Ok(url) = std::env::var("ENTL_TEST_PG") {
         let db3 = Db::open(":memory:")?;
         db3.migrate()?;
-        let mut sel = SinkSelect::default();
-        sel.schema = Some("rt_check".into());
         // fresh schema
+        let sel = SinkSelect {
+            schema: Some("rt_check".into()),
+            ..Default::default()
+        };
         let sink = build_sink(SinkTarget::Postgres, Some(&url), sel)?;
         pull_into(&db3, &repo, sink, opts())?;
         let s0c = extract_duckdb(&db3.conn, GIT_FULL_TABLES)?;
@@ -59,7 +76,10 @@ fn report(name: &str, s0: &entl_core::Snapshot, s1: &entl_core::Snapshot) {
     let d = diff(s0, s1);
     if d.is_empty() {
         let n: usize = s0.values().map(Vec::len).sum();
-        println!("{name}: OK  (S0 == S1, {n} rows across {} tables)", s0.len());
+        println!(
+            "{name}: OK  (S0 == S1, {n} rows across {} tables)",
+            s0.len()
+        );
     } else {
         println!("{name}: MISMATCH\n{d}");
     }

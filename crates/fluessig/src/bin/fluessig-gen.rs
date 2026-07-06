@@ -6,6 +6,9 @@
 //! file's banner — for consumers who want a marker in their generated code
 //! (e.g. a lint-suppression line). Off by default: fluessig doesn't bake any
 //! tool-specific markers into its output.
+//!
+//! straitjacket-allow-file:duplication — the catalog→enums extraction here mirrors
+//! the one in fluessig's regen test (tests/entl_catalog.rs); both feed the bindgen.
 
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -71,7 +74,12 @@ fn main() {
         let enums: Vec<(String, Vec<String>)> = catalog
             .enums
             .iter()
-            .map(|e| (e.name.clone(), e.variants.iter().map(|v| v.name.clone()).collect()))
+            .map(|e| {
+                (
+                    e.name.clone(),
+                    e.variants.iter().map(|v| v.name.clone()).collect(),
+                )
+            })
             .collect();
         write(&p, fluessig::bindgen::node_binding(&api, &enums, note));
         if let Some(py) = python {

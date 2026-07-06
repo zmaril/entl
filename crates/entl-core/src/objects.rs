@@ -8,9 +8,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use duckdb::arrow::array::{
-    ArrayRef, BinaryBuilder, BooleanBuilder, Int64Builder, StringBuilder,
-};
+use duckdb::arrow::array::{ArrayRef, BinaryBuilder, BooleanBuilder, Int64Builder, StringBuilder};
 use duckdb::arrow::datatypes::{DataType, Field, Schema};
 use duckdb::arrow::record_batch::RecordBatch;
 use duckdb::params;
@@ -66,10 +64,22 @@ pub fn ingest_git_objects(db: &Db, path: &str, sink: Option<&ChangeSink>) -> Res
     let (mut trees, mut entries, mut blobs) = (Vec::new(), Vec::new(), Vec::new());
     let (mut seen_tree, mut seen_blob) = (HashSet::new(), HashSet::new());
     for root in roots {
-        walk(&repo, root, &mut trees, &mut entries, &mut blobs, &mut seen_tree, &mut seen_blob)?;
+        walk(
+            &repo,
+            root,
+            &mut trees,
+            &mut entries,
+            &mut blobs,
+            &mut seen_tree,
+            &mut seen_blob,
+        )?;
     }
 
-    let stats = ObjIngest { trees: trees.len(), tree_entries: entries.len(), blobs: blobs.len() };
+    let stats = ObjIngest {
+        trees: trees.len(),
+        tree_entries: entries.len(),
+        blobs: blobs.len(),
+    };
 
     // Write DuckDB (appenders) + emit change batches for the sinks.
     {
@@ -81,15 +91,25 @@ pub fn ingest_git_objects(db: &Db, path: &str, sink: Option<&ChangeSink>) -> Res
         let mut ea = db.conn.appender("tree_entries")?;
         for e in &entries {
             ea.append_row(params![
-                e.tree_oid.as_bytes(), e.name, e.name, e.mode, e.entry_type, e.child_oid.as_bytes()
+                e.tree_oid.as_bytes(),
+                e.name,
+                e.name,
+                e.mode,
+                e.entry_type,
+                e.child_oid.as_bytes()
             ])?;
         }
         ea.flush()?;
         let mut ba = db.conn.appender("blobs")?;
         for b in &blobs {
             ba.append_row(params![
-                b.oid.as_bytes(), repo_id, b.size, b.is_binary,
-                Option::<&str>::None, Option::<&str>::None, b.content.as_slice()
+                b.oid.as_bytes(),
+                repo_id,
+                b.size,
+                b.is_binary,
+                Option::<&str>::None,
+                Option::<&str>::None,
+                b.content.as_slice()
             ])?;
         }
         ba.flush()?;
@@ -97,13 +117,25 @@ pub fn ingest_git_objects(db: &Db, path: &str, sink: Option<&ChangeSink>) -> Res
 
     if let Some(sink) = sink {
         for chunk in trees.chunks(CHUNK) {
-            sink.emit(ChangeBatch::new("trees", ChangeOp::Insert, trees_batch(chunk, &repo_id)?));
+            sink.emit(ChangeBatch::new(
+                "trees",
+                ChangeOp::Insert,
+                trees_batch(chunk, &repo_id)?,
+            ));
         }
         for chunk in entries.chunks(CHUNK) {
-            sink.emit(ChangeBatch::new("tree_entries", ChangeOp::Insert, entries_batch(chunk)?));
+            sink.emit(ChangeBatch::new(
+                "tree_entries",
+                ChangeOp::Insert,
+                entries_batch(chunk)?,
+            ));
         }
         for chunk in blobs.chunks(CHUNK) {
-            sink.emit(ChangeBatch::new("blobs", ChangeOp::Insert, blobs_batch(chunk, &repo_id)?));
+            sink.emit(ChangeBatch::new(
+                "blobs",
+                ChangeOp::Insert,
+                blobs_batch(chunk, &repo_id)?,
+            ));
         }
     }
 
@@ -184,7 +216,7 @@ fn str_col(vals: impl Iterator<Item = String>) -> ArrayRef {
 }
 
 fn repo_col(n: usize, repo_id: &str) -> ArrayRef {
-    str_col(std::iter::repeat(repo_id.to_string()).take(n))
+    str_col(std::iter::repeat_n(repo_id.to_string(), n))
 }
 
 fn trees_batch(rows: &[TreeRow], repo_id: &str) -> Result<RecordBatch> {
@@ -194,7 +226,10 @@ fn trees_batch(rows: &[TreeRow], repo_id: &str) -> Result<RecordBatch> {
     ]));
     Ok(RecordBatch::try_new(
         schema,
-        vec![binary_col(rows.iter().map(|r| &r.oid)), repo_col(rows.len(), repo_id)],
+        vec![
+            binary_col(rows.iter().map(|r| &r.oid)),
+            repo_col(rows.len(), repo_id),
+        ],
     )?)
 }
 
