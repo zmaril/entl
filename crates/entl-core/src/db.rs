@@ -58,10 +58,12 @@ impl Db {
                 .collect::<duckdb::Result<_>>()?
         };
         for t in existing {
-            self.conn.execute_batch(&format!("DROP TABLE IF EXISTS \"{t}\" CASCADE;"))?;
+            self.conn
+                .execute_batch(&format!("DROP TABLE IF EXISTS \"{t}\" CASCADE;"))?;
         }
         for t in DUCKDB_TABLES {
-            self.conn.execute_batch(&t.ddl.replace("__table__", t.name))?;
+            self.conn
+                .execute_batch(&t.ddl.replace("__table__", t.name))?;
         }
         self.conn.execute_batch(DUCKDB_EXTRAS)?;
         self.conn.execute("DELETE FROM _entl_schema", [])?;
@@ -137,8 +139,8 @@ mod tests {
     fn query_arrow_ipc_round_trips_and_covers_zero_rows() {
         let db = Db::open(":memory:").unwrap();
         let decode = |ipc: Vec<u8>| {
-            let r = arrow::ipc::reader::StreamReader::try_new(std::io::Cursor::new(ipc), None)
-                .unwrap();
+            let r =
+                arrow::ipc::reader::StreamReader::try_new(std::io::Cursor::new(ipc), None).unwrap();
             let schema = r.schema();
             let batches: Vec<_> = r.map(|b| b.unwrap()).collect();
             (schema, batches)

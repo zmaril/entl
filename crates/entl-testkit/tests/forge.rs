@@ -20,19 +20,50 @@ static ENV: Mutex<()> = Mutex::new(());
 
 fn one_commit_repo(dir: &std::path::Path) -> Vec<String> {
     let mut tree = BTreeMap::new();
-    tree.insert("a.txt".to_string(), GenBlob { content: b"hi\n".to_vec(), mode: Mode::Normal });
-    let sig = GenSig { name: "T".into(), email: "t@e.com".into(), time_secs: 1_600_000_000, tz: "+0000".into() };
+    tree.insert(
+        "a.txt".to_string(),
+        GenBlob {
+            content: b"hi\n".to_vec(),
+            mode: Mode::Normal,
+        },
+    );
+    let sig = GenSig {
+        name: "T".into(),
+        email: "t@e.com".into(),
+        time_secs: 1_600_000_000,
+        tz: "+0000".into(),
+    };
     let w = GitWorld {
-        commits: vec![GenCommit { parents: vec![], tree, author: sig.clone(), committer: sig, message: "c0\n".into() }],
-        refs: vec![GenRef { name: "refs/heads/main".into(), target: 0 }],
+        commits: vec![GenCommit {
+            parents: vec![],
+            tree,
+            author: sig.clone(),
+            committer: sig,
+            message: "c0\n".into(),
+        }],
+        refs: vec![GenRef {
+            name: "refs/heads/main".into(),
+            target: 0,
+        }],
     };
     let oids = materialize(&w, dir).unwrap();
-    git(dir, &["remote", "add", "origin", "https://github.com/acme/widget.git"]).unwrap();
+    git(
+        dir,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/acme/widget.git",
+        ],
+    )
+    .unwrap();
     oids
 }
 
 fn count(db: &Db, table: &str) -> i64 {
-    db.conn.query_row(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0)).unwrap()
+    db.conn
+        .query_row(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))
+        .unwrap()
 }
 
 #[test]
@@ -44,10 +75,22 @@ fn mock_forge_ingests_through_real_pipeline() {
         owner: "acme".into(),
         name: "widget".into(),
         users: vec![
-            GhUser { id: 1, login: "alice".into(), typ: "User".into() },
-            GhUser { id: 2, login: "bob".into(), typ: "User".into() },
+            GhUser {
+                id: 1,
+                login: "alice".into(),
+                typ: "User".into(),
+            },
+            GhUser {
+                id: 2,
+                login: "bob".into(),
+                typ: "User".into(),
+            },
         ],
-        labels: vec![GhLabel { name: "bug".into(), color: Some("f00".into()), description: Some("a bug".into()) }],
+        labels: vec![GhLabel {
+            name: "bug".into(),
+            color: Some("f00".into()),
+            description: Some("a bug".into()),
+        }],
         pulls: vec![GhPull {
             number: 1,
             title: Some("Add feature".into()),
@@ -71,10 +114,31 @@ fn mock_forge_ingests_through_real_pipeline() {
             rollup: Some("SUCCESS".into()),
             labels: vec![0],
             commits: vec![0],
-            reviews: vec![GhReview { id: 100, state: Some("APPROVED".into()), submitted_at: Some("2020-01-01T12:00:00Z".into()), body: Some("lgtm".into()), author: Some(1) }],
+            reviews: vec![GhReview {
+                id: 100,
+                state: Some("APPROVED".into()),
+                submitted_at: Some("2020-01-01T12:00:00Z".into()),
+                body: Some("lgtm".into()),
+                author: Some(1),
+            }],
             requested_reviewers: vec![1],
-            comments: vec![GhComment { id: 200, body: Some("nice".into()), created_at: Some("2020-01-01T13:00:00Z".into()), author: Some(1) }],
-            review_comments: vec![GhReviewComment { id: 300, path: Some("a.txt".into()), line: Some(1), side: Some("RIGHT".into()), commit: Some(0), body: Some("fix".into()), created_at: Some("2020-01-01T14:00:00Z".into()), reply_to: None, author: Some(1) }],
+            comments: vec![GhComment {
+                id: 200,
+                body: Some("nice".into()),
+                created_at: Some("2020-01-01T13:00:00Z".into()),
+                author: Some(1),
+            }],
+            review_comments: vec![GhReviewComment {
+                id: 300,
+                path: Some("a.txt".into()),
+                line: Some(1),
+                side: Some("RIGHT".into()),
+                commit: Some(0),
+                body: Some("fix".into()),
+                created_at: Some("2020-01-01T14:00:00Z".into()),
+                reply_to: None,
+                author: Some(1),
+            }],
         }],
         issues: vec![GhIssue {
             number: 1,
@@ -86,18 +150,63 @@ fn mock_forge_ingests_through_real_pipeline() {
             closed_at: None,
             author: Some(0),
             labels: vec![0],
-            comments: vec![GhComment { id: 400, body: Some("me too".into()), created_at: Some("2020-01-01T15:00:00Z".into()), author: Some(1) }],
+            comments: vec![GhComment {
+                id: 400,
+                body: Some("me too".into()),
+                created_at: Some("2020-01-01T15:00:00Z".into()),
+                author: Some(1),
+            }],
         }],
-        events: vec![GhEvent { id: "1000".into(), typ: Some("PushEvent".into()), actor: Some(0), created_at: Some("2020-01-03T00:00:00Z".into()), payload: json!({"size": 1}) }],
-        workflows: vec![GhWorkflow { id: 500, name: "CI".into(), path: ".github/workflows/ci.yml".into(), state: "active".into() }],
+        events: vec![GhEvent {
+            id: "1000".into(),
+            typ: Some("PushEvent".into()),
+            actor: Some(0),
+            created_at: Some("2020-01-03T00:00:00Z".into()),
+            payload: json!({"size": 1}),
+        }],
+        workflows: vec![GhWorkflow {
+            id: 500,
+            name: "CI".into(),
+            path: ".github/workflows/ci.yml".into(),
+            state: "active".into(),
+        }],
         runs: vec![GhRun {
-            id: 600, workflow_id: 500, head_commit: 0, head_branch: "main".into(), event: "push".into(),
-            status: "completed".into(), conclusion: Some("success".into()), run_number: 1,
-            jobs: vec![GhJob { id: 700, name: "build".into(), status: "completed".into(), conclusion: Some("success".into()), runner_name: Some("ubuntu".into()),
-                steps: vec![GhStep { number: 1, name: "checkout".into(), status: "completed".into(), conclusion: Some("success".into()) }] }],
+            id: 600,
+            workflow_id: 500,
+            head_commit: 0,
+            head_branch: "main".into(),
+            event: "push".into(),
+            status: "completed".into(),
+            conclusion: Some("success".into()),
+            run_number: 1,
+            jobs: vec![GhJob {
+                id: 700,
+                name: "build".into(),
+                status: "completed".into(),
+                conclusion: Some("success".into()),
+                runner_name: Some("ubuntu".into()),
+                steps: vec![GhStep {
+                    number: 1,
+                    name: "checkout".into(),
+                    status: "completed".into(),
+                    conclusion: Some("success".into()),
+                }],
+            }],
         }],
-        checks: vec![GhCheck { id: 800, commit: 0, name: "lint".into(), conclusion: Some("success".into()) }],
-        statuses: vec![GhStatus { id: 900, commit: 0, context: Some("ci/build".into()), state: "success".into(), description: Some("ok".into()), target_url: Some("https://x.example/s".into()) }],
+        checks: vec![GhCheck {
+            id: 800,
+            commit: 0,
+            name: "lint".into(),
+            conclusion: Some("success".into()),
+        }],
+        statuses: vec![GhStatus {
+            id: 900,
+            commit: 0,
+            context: Some("ci/build".into()),
+            state: "success".into(),
+            description: Some("ok".into()),
+            target_url: Some("https://x.example/s".into()),
+        }],
     };
 
     let mock = MockForge::start();
@@ -117,7 +226,11 @@ fn mock_forge_ingests_through_real_pipeline() {
     assert_eq!(count(&db, "gh_pull_requests"), 1, "prs");
     assert_eq!(count(&db, "gh_pr_reviews"), 1, "reviews");
     assert_eq!(count(&db, "gh_pr_commits"), 1, "pr commits");
-    assert_eq!(count(&db, "gh_requested_reviewers"), 1, "requested reviewers");
+    assert_eq!(
+        count(&db, "gh_requested_reviewers"),
+        1,
+        "requested reviewers"
+    );
     assert_eq!(count(&db, "gh_review_comments"), 1, "review comments");
     assert_eq!(count(&db, "gh_comments"), 2, "comments (pr + issue)");
     assert_eq!(count(&db, "gh_labeled"), 2, "labeled (pr + issue)");
@@ -147,7 +260,10 @@ fn mock_forge_ingests_through_real_pipeline() {
         if t == "gh_assignees" {
             continue; // documented: DDL exists, no writer
         }
-        assert!(count(&db, &t) > 0, "mock does not cover {t} (ingest writes it but it's empty)");
+        assert!(
+            count(&db, &t) > 0,
+            "mock does not cover {t} (ingest writes it but it's empty)"
+        );
     }
 }
 
@@ -163,7 +279,16 @@ fn pull_forge(repo: &str, base_url: &str, target: SinkTarget, dest: &str) -> Db 
     let _g = ENV.lock().unwrap();
     std::env::set_var("ENTL_GITHUB_API", base_url);
     std::env::set_var("GH_TOKEN", "mock");
-    pull_into(&db, repo, sink, PullOpts { github: true, objects: false }).unwrap();
+    pull_into(
+        &db,
+        repo,
+        sink,
+        PullOpts {
+            github: true,
+            objects: false,
+        },
+    )
+    .unwrap();
     std::env::remove_var("ENTL_GITHUB_API");
     db
 }

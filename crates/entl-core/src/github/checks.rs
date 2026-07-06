@@ -43,7 +43,11 @@ pub async fn sync_checks(
                 .list_check_runs_for_git_ref(Commitish(sha.clone()))
                 .send()
                 .await;
-            let statuses = client.repos(owner, name).list_statuses(sha.clone()).send().await;
+            let statuses = client
+                .repos(owner, name)
+                .list_statuses(sha.clone())
+                .send()
+                .await;
             (sha, checks, statuses)
         })
         .buffer_unordered(CONCURRENCY)

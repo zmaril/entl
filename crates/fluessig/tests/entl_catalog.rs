@@ -60,7 +60,12 @@ fn the_three_relation_shapes() {
     assert_eq!(rel.table.as_deref(), Some("commit_parents"));
     assert_eq!(rel.properties.as_deref(), Some("CommitParent"));
     let edge = c.edge_struct("CommitParent").unwrap();
-    let local_key: Vec<_> = edge.fields.iter().filter(|f| f.key).map(|f| f.name.as_str()).collect();
+    let local_key: Vec<_> = edge
+        .fields
+        .iter()
+        .filter(|f| f.key)
+        .map(|f| f.name.as_str())
+        .collect();
     assert_eq!(local_key, ["idx"]);
 
     // 2. Polymorphic edge: Tree.entries → GitObject with (entry_type, child_oid).
@@ -70,7 +75,10 @@ fn the_three_relation_shapes() {
     assert_eq!(rel.to, "GitObject");
     assert!(c.entity("GitObject").unwrap().is_abstract);
     assert_eq!(rel.type_column.as_deref(), Some("entry_type"));
-    assert_eq!(rel.fk_columns.as_deref(), Some(["child_oid".to_string()].as_slice()));
+    assert_eq!(
+        rel.fk_columns.as_deref(),
+        Some(["child_oid".to_string()].as_slice())
+    );
 
     // 3. Polymorphic to-one: GhComment.subject → the GhSubject family.
     let comment = c.entity("GhComment").unwrap();
@@ -102,9 +110,19 @@ fn layer_a_details_survive() {
     // (author identity is flattened into author_* columns). Value structs here
     // are all API DTOs (GitStats, …); Layer-A nesting is exercised by the spike.
     let commit = c.entity("Commit").unwrap();
-    let author_name = commit.fields.iter().find(|f| f.name == "authorName").unwrap();
+    let author_name = commit
+        .fields
+        .iter()
+        .find(|f| f.name == "authorName")
+        .unwrap();
     assert!(author_name.relation.is_none());
-    assert_eq!(author_name.ty, TypeRef::Scalar { name: "string".into(), base: None });
+    assert_eq!(
+        author_name.ty,
+        TypeRef::Scalar {
+            name: "string".into(),
+            base: None
+        }
+    );
     assert!(c.value_struct("GitStats").is_some());
 
     // Defaults for byte parity.
@@ -131,37 +149,81 @@ fn the_committed_schema_gen_module_regenerates_identically() {
     // package.json `gen` script) — keep the two in sync.
     let note = Some("straitjacket-allow-file:duplication — generated code repeats by design.");
 
-    let committed = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../entl-core/src/schema_gen.rs"));
-    assert_eq!(fluessig::sql::rust_schema_module(&c, note), committed, "{}", stale("schema_gen.rs"));
+    let committed = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../entl-core/src/schema_gen.rs"
+    ));
+    assert_eq!(
+        fluessig::sql::rust_schema_module(&c, note),
+        committed,
+        "{}",
+        stale("schema_gen.rs")
+    );
 
     let committed = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/schema_docs.json"));
     assert_eq!(
-        format!("{}\n", fluessig::sql::schema_docs_json(&c, fluessig::sql::Dialect::Duckdb)),
+        format!(
+            "{}\n",
+            fluessig::sql::schema_docs_json(&c, fluessig::sql::Dialect::Duckdb)
+        ),
         committed,
         "{}",
         stale("schema_docs.json")
     );
 
-    let committed =
-        include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../entl-python/python/entl/models.py"));
-    assert_eq!(fluessig::codegen::python_models(&c, note), committed, "{}", stale("models.py"));
+    let committed = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../entl-python/python/entl/models.py"
+    ));
+    assert_eq!(
+        fluessig::codegen::python_models(&c, note),
+        committed,
+        "{}",
+        stale("models.py")
+    );
 
-    let committed = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../entl-node/tables.gen.ts"));
-    assert_eq!(fluessig::codegen::ts_tables(&c, note), committed, "{}", stale("tables.gen.ts"));
+    let committed = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../entl-node/tables.gen.ts"
+    ));
+    assert_eq!(
+        fluessig::codegen::ts_tables(&c, note),
+        committed,
+        "{}",
+        stale("tables.gen.ts")
+    );
 
-    let committed = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../entl-node/schema.gen.ts"));
-    assert_eq!(fluessig::codegen::ts_drizzle(&c, note), committed, "{}", stale("schema.gen.ts"));
+    let committed = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../entl-node/schema.gen.ts"
+    ));
+    assert_eq!(
+        fluessig::codegen::ts_drizzle(&c, note),
+        committed,
+        "{}",
+        stale("schema.gen.ts")
+    );
 
     // the generated node binding (the op layer)
-    let api = fluessig::api::load_api(include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/api.json")))
-        .unwrap();
+    let api = fluessig::api::load_api(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/api.json"
+    )))
+    .unwrap();
     let enums: Vec<(String, Vec<String>)> = c
         .enums
         .iter()
-        .map(|e| (e.name.clone(), e.variants.iter().map(|v| v.name.clone()).collect()))
+        .map(|e| {
+            (
+                e.name.clone(),
+                e.variants.iter().map(|v| v.name.clone()).collect(),
+            )
+        })
         .collect();
-    let committed =
-        include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../entl-node/src/generated.rs"));
+    let committed = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../entl-node/src/generated.rs"
+    ));
     assert_eq!(
         fluessig::bindgen::node_binding(&api, &enums, note),
         committed,
@@ -169,8 +231,10 @@ fn the_committed_schema_gen_module_regenerates_identically() {
         stale("entl-node generated.rs")
     );
 
-    let committed =
-        include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../entl-python/src/generated.rs"));
+    let committed = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../entl-python/src/generated.rs"
+    ));
     assert_eq!(
         fluessig::bindgen::python_binding(&api, &enums, note),
         committed,
@@ -178,8 +242,10 @@ fn the_committed_schema_gen_module_regenerates_identically() {
         stale("entl-python generated.rs")
     );
 
-    let committed =
-        include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../entl-ruby/src/generated.rs"));
+    let committed = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../entl-ruby/src/generated.rs"
+    ));
     assert_eq!(
         fluessig::bindgen::ruby_binding(&api, &enums, note),
         committed,
@@ -197,7 +263,10 @@ fn ddl_carries_derived_views_meta_and_extras() {
     let views = derived_views(&c, Dialect::Postgres);
     assert_eq!(views.len(), 1, "exactly one entity has @derived fields");
     let v = &views[0];
-    assert!(v.contains("CREATE OR REPLACE VIEW \"commits_derived\""), "{v}");
+    assert!(
+        v.contains("CREATE OR REPLACE VIEW \"commits_derived\""),
+        "{v}"
+    );
     assert!(
         v.contains("EXISTS (SELECT 1 FROM \"commit_parents\" x WHERE x.\"commit_oid\" = t.\"oid\" AND x.\"idx\" = 1) AS \"is_merge\""),
         "{v}"
@@ -211,7 +280,18 @@ fn ddl_carries_derived_views_meta_and_extras() {
     assert!(sql.contains("\"_fluessig_meta\""));
     assert!(sql.trim_end().ends_with(extras), "extras append last");
     let fp = fingerprint(&c, Dialect::Postgres, Some(extras));
-    assert!(sql.contains(&fp), "the emitted meta INSERT carries the fingerprint");
-    assert_ne!(fp, fingerprint(&c, Dialect::Postgres, None), "editing extras trips drift");
-    assert_ne!(fp, fingerprint(&c, Dialect::Sqlite, Some(extras)), "fingerprint is per-dialect");
+    assert!(
+        sql.contains(&fp),
+        "the emitted meta INSERT carries the fingerprint"
+    );
+    assert_ne!(
+        fp,
+        fingerprint(&c, Dialect::Postgres, None),
+        "editing extras trips drift"
+    );
+    assert_ne!(
+        fp,
+        fingerprint(&c, Dialect::Sqlite, Some(extras)),
+        "fingerprint is per-dialect"
+    );
 }

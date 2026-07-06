@@ -141,8 +141,12 @@ fn collect_notes(repo: &gix::Repository) -> Result<Vec<NoteRecord>> {
         let Ok(mut r) = r else { continue };
         let name = r.name().as_bstr().to_string();
         let Ok(id) = r.peel_to_id() else { continue };
-        let Ok(obj) = repo.find_object(id.detach()) else { continue };
-        let Ok(commit) = obj.try_into_commit() else { continue };
+        let Ok(obj) = repo.find_object(id.detach()) else {
+            continue;
+        };
+        let Ok(commit) = obj.try_into_commit() else {
+            continue;
+        };
         let Ok(tree) = commit.tree() else { continue };
         walk_notes(repo, &tree, String::new(), &name, &mut out)?;
     }
@@ -164,11 +168,14 @@ fn walk_notes(
                 let sub = repo.find_object(e.oid().to_owned())?.into_tree();
                 walk_notes(repo, &sub, format!("{prefix}{seg}"), notes_ref, out)?;
             }
-            gix::object::tree::EntryKind::Blob
-            | gix::object::tree::EntryKind::BlobExecutable => {
+            gix::object::tree::EntryKind::Blob | gix::object::tree::EntryKind::BlobExecutable => {
                 let hex = format!("{prefix}{seg}");
-                let Ok(oid) = gix::ObjectId::from_hex(hex.as_bytes()) else { continue };
-                let Ok(blob) = repo.find_object(e.oid().to_owned()) else { continue };
+                let Ok(oid) = gix::ObjectId::from_hex(hex.as_bytes()) else {
+                    continue;
+                };
+                let Ok(blob) = repo.find_object(e.oid().to_owned()) else {
+                    continue;
+                };
                 out.push(NoteRecord {
                     notes_ref: notes_ref.to_string(),
                     annotated_oid: oid,
@@ -238,7 +245,9 @@ pub fn ingest_git_streamed(
     // Seen-set for the incremental walk (oids are BLOB -> read as bytes).
     let mut seen: HashSet<gix::ObjectId> = HashSet::new();
     {
-        let mut stmt = db.conn.prepare("SELECT oid FROM commits WHERE repo_id = ?")?;
+        let mut stmt = db
+            .conn
+            .prepare("SELECT oid FROM commits WHERE repo_id = ?")?;
         let rows = stmt.query_map([&repo_id], |r| r.get::<_, Vec<u8>>(0))?;
         for r in rows {
             if let Ok(oid) = gix::ObjectId::try_from(r?.as_slice()) {
@@ -252,8 +261,7 @@ pub fn ingest_git_streamed(
     // a per-ref upsert — the latter was the real ingest bottleneck.
     let refs = collect_refs(&repo)?;
     let mut tips: Vec<gix::ObjectId> = Vec::new();
-    let mut by_name: std::collections::HashMap<&str, &RefRecord> =
-        std::collections::HashMap::new();
+    let mut by_name: std::collections::HashMap<&str, &RefRecord> = std::collections::HashMap::new();
     for rr in &refs {
         // Tags can point at non-commit objects (the kernel has tags on trees);
         // only seed the walk with tips that actually resolve to commits.
@@ -282,7 +290,11 @@ pub fn ingest_git_streamed(
     // Stream refs from memory — the repo's refs are wholesale-replaced each pull.
     if let Some(sink) = sink {
         let rows: Vec<&RefRecord> = by_name.values().copied().collect();
-        sink.emit(ChangeBatch::new("refs", ChangeOp::Replace, refs_batch(&rows, &repo_id)?));
+        sink.emit(ChangeBatch::new(
+            "refs",
+            ChangeOp::Replace,
+            refs_batch(&rows, &repo_id)?,
+        ));
     }
 
     // Git notes (refs/notes/*): mutable per-repo state like refs — bulk-replace.
@@ -292,7 +304,12 @@ pub fn ingest_git_streamed(
     if !notes.is_empty() {
         let mut app = db.conn.appender("git_notes")?;
         for n in &notes {
-            app.append_row(params![repo_id, n.notes_ref, n.annotated_oid.as_bytes(), n.note])?;
+            app.append_row(params![
+                repo_id,
+                n.notes_ref,
+                n.annotated_oid.as_bytes(),
+                n.note
+            ])?;
         }
         app.flush()?;
     }
@@ -331,30 +348,51 @@ pub fn ingest_git_streamed(
             let mut pa = writer_conn.appender("commit_parents")?;
             let mut fa = writer_conn.appender("file_changes")?;
             let (mut nc, mut nfc) = (0usize, 0usize);
-            let (mut cbuf, mut pbuf, mut fbuf) =
-                (Vec::<CommitRow>::new(), Vec::<ParentRow>::new(), Vec::<ChangeRow>::new());
+            let (mut cbuf, mut pbuf, mut fbuf) = (
+                Vec::<CommitRow>::new(),
+                Vec::<ParentRow>::new(),
+                Vec::<ChangeRow>::new(),
+            );
             let mut live = true;
             for b in rx.iter() {
                 {
                     let r = &b.commit;
                     ca.append_row(params![
-                        r.oid.as_bytes(), repo_id_w, r.tree_oid.as_bytes(), r.message, r.summary,
-                        r.author_name, r.author_email,
-                        Value::Timestamp(TimeUnit::Microsecond, r.author_us), r.author_tz,
-                        r.committer_name, r.committer_email,
-                        Value::Timestamp(TimeUnit::Microsecond, r.committer_us), r.committer_tz,
-                        r.parent_count, r.is_merge, r.gpg_signed,
+                        r.oid.as_bytes(),
+                        repo_id_w,
+                        r.tree_oid.as_bytes(),
+                        r.message,
+                        r.summary,
+                        r.author_name,
+                        r.author_email,
+                        Value::Timestamp(TimeUnit::Microsecond, r.author_us),
+                        r.author_tz,
+                        r.committer_name,
+                        r.committer_email,
+                        Value::Timestamp(TimeUnit::Microsecond, r.committer_us),
+                        r.committer_tz,
+                        r.parent_count,
+                        r.is_merge,
+                        r.gpg_signed,
                     ])?;
                     for p in &b.parents {
                         // generated column order: (commit_oid, idx, parent_oid) — edge tables emit
                         // source, LOCAL-KEY props, then target (schema_gen is canonical)
-                        pa.append_row(params![p.commit_oid.as_bytes(), p.idx, p.parent_oid.as_bytes()])?;
+                        pa.append_row(params![
+                            p.commit_oid.as_bytes(),
+                            p.idx,
+                            p.parent_oid.as_bytes()
+                        ])?;
                     }
                     for c in &b.changes {
                         nfc += 1;
                         fa.append_row(params![
-                            c.commit_oid.as_bytes(), c.path, c.old_path, c.status,
-                            c.additions, c.deletions,
+                            c.commit_oid.as_bytes(),
+                            c.path,
+                            c.old_path,
+                            c.status,
+                            c.additions,
+                            c.deletions,
                             c.blob_oid.as_ref().map(|o| o.as_bytes()),
                             c.old_blob_oid.as_ref().map(|o| o.as_bytes()),
                         ])?;
@@ -434,13 +472,15 @@ fn compute_commit(
         None => Some(repo.empty_tree()),
     };
     if let Some(old_tree) = old_tree {
-        old_tree.changes()?.for_each_to_obtain_tree(&new_tree, |change| {
-            if let Some(row) = map_change(oid, change, rcache) {
-                changes.push(row);
-            }
-            rcache.clear_resource_cache_keep_allocation();
-            Ok::<_, std::convert::Infallible>(ControlFlow::Continue(()))
-        })?;
+        old_tree
+            .changes()?
+            .for_each_to_obtain_tree(&new_tree, |change| {
+                if let Some(row) = map_change(oid, change, rcache) {
+                    changes.push(row);
+                }
+                rcache.clear_resource_cache_keep_allocation();
+                Ok::<_, std::convert::Infallible>(ControlFlow::Continue(()))
+            })?;
     }
 
     let parent_rows = parents
@@ -495,7 +535,12 @@ fn map_change(
     };
 
     match change {
-        Change::Addition { location, entry_mode, id, .. } => entry_mode.is_blob().then(|| ChangeRow {
+        Change::Addition {
+            location,
+            entry_mode,
+            id,
+            ..
+        } => entry_mode.is_blob().then(|| ChangeRow {
             commit_oid,
             path: location.to_string(),
             old_path: None,
@@ -505,7 +550,12 @@ fn map_change(
             blob_oid: Some(id.detach()),
             old_blob_oid: None,
         }),
-        Change::Deletion { location, entry_mode, id, .. } => entry_mode.is_blob().then(|| ChangeRow {
+        Change::Deletion {
+            location,
+            entry_mode,
+            id,
+            ..
+        } => entry_mode.is_blob().then(|| ChangeRow {
             commit_oid,
             path: location.to_string(),
             old_path: None,
@@ -515,19 +565,29 @@ fn map_change(
             blob_oid: None,
             old_blob_oid: Some(id.detach()),
         }),
-        Change::Modification { location, entry_mode, id, previous_id, .. } => {
-            entry_mode.is_blob().then(|| ChangeRow {
-                commit_oid,
-                path: location.to_string(),
-                old_path: None,
-                status: "M",
-                additions,
-                deletions,
-                blob_oid: Some(id.detach()),
-                old_blob_oid: Some(previous_id.detach()),
-            })
-        }
-        Change::Rewrite { location, source_location, id, source_id, .. } => Some(ChangeRow {
+        Change::Modification {
+            location,
+            entry_mode,
+            id,
+            previous_id,
+            ..
+        } => entry_mode.is_blob().then(|| ChangeRow {
+            commit_oid,
+            path: location.to_string(),
+            old_path: None,
+            status: "M",
+            additions,
+            deletions,
+            blob_oid: Some(id.detach()),
+            old_blob_oid: Some(previous_id.detach()),
+        }),
+        Change::Rewrite {
+            location,
+            source_location,
+            id,
+            source_id,
+            ..
+        } => Some(ChangeRow {
             commit_oid,
             path: location.to_string(),
             old_path: Some(source_location.to_string()),
@@ -549,10 +609,25 @@ const STREAM_CHUNK: usize = 2000;
 
 fn commits_batch(rows: &[CommitRow], repo_id: &str) -> Result<RecordBatch> {
     let (mut oid, mut tree) = (BinaryBuilder::new(), BinaryBuilder::new());
-    let (mut rid, mut msg, mut summ) = (StringBuilder::new(), StringBuilder::new(), StringBuilder::new());
-    let (mut an, mut ae, mut atz) = (StringBuilder::new(), StringBuilder::new(), StringBuilder::new());
-    let (mut cn, mut ce, mut ctz) = (StringBuilder::new(), StringBuilder::new(), StringBuilder::new());
-    let (mut aw, mut cw) = (TimestampMicrosecondBuilder::new(), TimestampMicrosecondBuilder::new());
+    let (mut rid, mut msg, mut summ) = (
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+    );
+    let (mut an, mut ae, mut atz) = (
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+    );
+    let (mut cn, mut ce, mut ctz) = (
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+    );
+    let (mut aw, mut cw) = (
+        TimestampMicrosecondBuilder::new(),
+        TimestampMicrosecondBuilder::new(),
+    );
     let mut pc = Int32Builder::new();
     let (mut merge, mut gpg) = (BooleanBuilder::new(), BooleanBuilder::new());
     for r in rows {
@@ -593,18 +668,32 @@ fn commits_batch(rows: &[CommitRow], repo_id: &str) -> Result<RecordBatch> {
         Field::new("gpg_signed", DataType::Boolean, false),
     ]));
     let cols: Vec<ArrayRef> = vec![
-        Arc::new(oid.finish()), Arc::new(rid.finish()), Arc::new(tree.finish()),
-        Arc::new(msg.finish()), Arc::new(summ.finish()), Arc::new(an.finish()),
-        Arc::new(ae.finish()), Arc::new(aw.finish()), Arc::new(atz.finish()),
-        Arc::new(cn.finish()), Arc::new(ce.finish()), Arc::new(cw.finish()),
-        Arc::new(ctz.finish()), Arc::new(pc.finish()), Arc::new(merge.finish()),
+        Arc::new(oid.finish()),
+        Arc::new(rid.finish()),
+        Arc::new(tree.finish()),
+        Arc::new(msg.finish()),
+        Arc::new(summ.finish()),
+        Arc::new(an.finish()),
+        Arc::new(ae.finish()),
+        Arc::new(aw.finish()),
+        Arc::new(atz.finish()),
+        Arc::new(cn.finish()),
+        Arc::new(ce.finish()),
+        Arc::new(cw.finish()),
+        Arc::new(ctz.finish()),
+        Arc::new(pc.finish()),
+        Arc::new(merge.finish()),
         Arc::new(gpg.finish()),
     ];
     Ok(RecordBatch::try_new(schema, cols)?)
 }
 
 fn parents_batch(rows: &[ParentRow]) -> Result<RecordBatch> {
-    let (mut co, mut po, mut idx) = (BinaryBuilder::new(), BinaryBuilder::new(), Int32Builder::new());
+    let (mut co, mut po, mut idx) = (
+        BinaryBuilder::new(),
+        BinaryBuilder::new(),
+        Int32Builder::new(),
+    );
     for r in rows {
         co.append_value(r.commit_oid.as_bytes());
         po.append_value(r.parent_oid.as_bytes());
@@ -615,13 +704,25 @@ fn parents_batch(rows: &[ParentRow]) -> Result<RecordBatch> {
         Field::new("parent_oid", DataType::Binary, false),
         Field::new("idx", DataType::Int32, false),
     ]));
-    let cols: Vec<ArrayRef> = vec![Arc::new(co.finish()), Arc::new(po.finish()), Arc::new(idx.finish())];
+    let cols: Vec<ArrayRef> = vec![
+        Arc::new(co.finish()),
+        Arc::new(po.finish()),
+        Arc::new(idx.finish()),
+    ];
     Ok(RecordBatch::try_new(schema, cols)?)
 }
 
 fn file_changes_batch(rows: &[ChangeRow]) -> Result<RecordBatch> {
-    let (mut co, mut bo, mut obo) = (BinaryBuilder::new(), BinaryBuilder::new(), BinaryBuilder::new());
-    let (mut path, mut oldp, mut status) = (StringBuilder::new(), StringBuilder::new(), StringBuilder::new());
+    let (mut co, mut bo, mut obo) = (
+        BinaryBuilder::new(),
+        BinaryBuilder::new(),
+        BinaryBuilder::new(),
+    );
+    let (mut path, mut oldp, mut status) = (
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+    );
     let (mut add, mut del) = (Int32Builder::new(), Int32Builder::new());
     for r in rows {
         co.append_value(r.commit_oid.as_bytes());
@@ -644,16 +745,25 @@ fn file_changes_batch(rows: &[ChangeRow]) -> Result<RecordBatch> {
         Field::new("old_blob_oid", DataType::Binary, true),
     ]));
     let cols: Vec<ArrayRef> = vec![
-        Arc::new(co.finish()), Arc::new(path.finish()), Arc::new(oldp.finish()),
-        Arc::new(status.finish()), Arc::new(add.finish()), Arc::new(del.finish()),
-        Arc::new(bo.finish()), Arc::new(obo.finish()),
+        Arc::new(co.finish()),
+        Arc::new(path.finish()),
+        Arc::new(oldp.finish()),
+        Arc::new(status.finish()),
+        Arc::new(add.finish()),
+        Arc::new(del.finish()),
+        Arc::new(bo.finish()),
+        Arc::new(obo.finish()),
     ];
     Ok(RecordBatch::try_new(schema, cols)?)
 }
 
 fn refs_batch(rows: &[&RefRecord], repo_id: &str) -> Result<RecordBatch> {
-    let (mut rid, mut name, mut kind, mut up) =
-        (StringBuilder::new(), StringBuilder::new(), StringBuilder::new(), StringBuilder::new());
+    let (mut rid, mut name, mut kind, mut up) = (
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+    );
     let mut tgt = BinaryBuilder::new();
     let mut sym = BooleanBuilder::new();
     for r in rows {
@@ -673,15 +783,22 @@ fn refs_batch(rows: &[&RefRecord], repo_id: &str) -> Result<RecordBatch> {
         Field::new("upstream", DataType::Utf8, true),
     ]));
     let cols: Vec<ArrayRef> = vec![
-        Arc::new(rid.finish()), Arc::new(name.finish()), Arc::new(kind.finish()),
-        Arc::new(tgt.finish()), Arc::new(sym.finish()), Arc::new(up.finish()),
+        Arc::new(rid.finish()),
+        Arc::new(name.finish()),
+        Arc::new(kind.finish()),
+        Arc::new(tgt.finish()),
+        Arc::new(sym.finish()),
+        Arc::new(up.finish()),
     ];
     Ok(RecordBatch::try_new(schema, cols)?)
 }
 
 fn notes_batch(rows: &[NoteRecord], repo_id: &str) -> Result<RecordBatch> {
-    let (mut rid, mut nref, mut note) =
-        (StringBuilder::new(), StringBuilder::new(), StringBuilder::new());
+    let (mut rid, mut nref, mut note) = (
+        StringBuilder::new(),
+        StringBuilder::new(),
+        StringBuilder::new(),
+    );
     let mut oid = BinaryBuilder::new();
     for n in rows {
         rid.append_value(repo_id);
@@ -696,7 +813,9 @@ fn notes_batch(rows: &[NoteRecord], repo_id: &str) -> Result<RecordBatch> {
         Field::new("note", DataType::Utf8, false),
     ]));
     let cols: Vec<ArrayRef> = vec![
-        Arc::new(rid.finish()), Arc::new(nref.finish()), Arc::new(oid.finish()),
+        Arc::new(rid.finish()),
+        Arc::new(nref.finish()),
+        Arc::new(oid.finish()),
         Arc::new(note.finish()),
     ];
     Ok(RecordBatch::try_new(schema, cols)?)
@@ -713,13 +832,25 @@ fn flush_git_stream(
 ) -> Result<bool> {
     let mut live = true;
     if !cbuf.is_empty() {
-        live &= sink.emit(ChangeBatch::new("commits", ChangeOp::Insert, commits_batch(cbuf, repo_id)?));
+        live &= sink.emit(ChangeBatch::new(
+            "commits",
+            ChangeOp::Insert,
+            commits_batch(cbuf, repo_id)?,
+        ));
     }
     if !pbuf.is_empty() {
-        live &= sink.emit(ChangeBatch::new("commit_parents", ChangeOp::Insert, parents_batch(pbuf)?));
+        live &= sink.emit(ChangeBatch::new(
+            "commit_parents",
+            ChangeOp::Insert,
+            parents_batch(pbuf)?,
+        ));
     }
     if !fbuf.is_empty() {
-        live &= sink.emit(ChangeBatch::new("file_changes", ChangeOp::Insert, file_changes_batch(fbuf)?));
+        live &= sink.emit(ChangeBatch::new(
+            "file_changes",
+            ChangeOp::Insert,
+            file_changes_batch(fbuf)?,
+        ));
     }
     cbuf.clear();
     pbuf.clear();
@@ -791,8 +922,15 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
 
         assert_eq!(ingest.new_commits, 2, "ingested two commits");
-        assert_eq!(rows.get("commits").copied().unwrap_or(0), 2, "two commit rows streamed");
-        assert!(rows.get("file_changes").copied().unwrap_or(0) >= 2, "file_changes streamed");
+        assert_eq!(
+            rows.get("commits").copied().unwrap_or(0),
+            2,
+            "two commit rows streamed"
+        );
+        assert!(
+            rows.get("file_changes").copied().unwrap_or(0) >= 2,
+            "file_changes streamed"
+        );
         assert!(rows.contains_key("refs"), "refs streamed");
     }
 
@@ -802,7 +940,17 @@ mod tests {
     fn ingest_captures_git_notes() {
         let dir = fixture_repo("notes");
         git(&dir, &["notes", "add", "-m", "reviewed: looks good"]);
-        git(&dir, &["notes", "--ref", "refs/notes/pm", "add", "-m", "pm-state: shipped"]);
+        git(
+            &dir,
+            &[
+                "notes",
+                "--ref",
+                "refs/notes/pm",
+                "add",
+                "-m",
+                "pm-state: shipped",
+            ],
+        );
 
         let db = Db::open(":memory:").unwrap();
         db.migrate().unwrap();
@@ -821,16 +969,22 @@ mod tests {
             )
             .unwrap();
         assert_eq!(note, "reviewed: looks good\n");
-        let total: i64 =
-            db.conn.query_row("SELECT count(*) FROM git_notes", [], |r| r.get(0)).unwrap();
-        assert_eq!(total, 2, "both notes refs captured (got {n} in the commits ref)");
+        let total: i64 = db
+            .conn
+            .query_row("SELECT count(*) FROM git_notes", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            total, 2,
+            "both notes refs captured (got {n} in the commits ref)"
+        );
 
         // Re-sync replaces, not duplicates.
         ingest_git(&db, &path, &counter).unwrap();
-        let total: i64 =
-            db.conn.query_row("SELECT count(*) FROM git_notes", [], |r| r.get(0)).unwrap();
+        let total: i64 = db
+            .conn
+            .query_row("SELECT count(*) FROM git_notes", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(total, 2, "bulk-replace on re-sync");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
-

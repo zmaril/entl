@@ -41,18 +41,25 @@ fn note_line(note: Option<&str>) -> String {
 /// `changes` → `Changes` (stream class names, task names).
 fn pascal(s: &str) -> String {
     let sn = snake(s);
-    sn.split('_').map(|p| {
-        let mut c = p.chars();
-        c.next().map(|f| f.to_ascii_uppercase().to_string() + c.as_str()).unwrap_or_default()
-    }).collect()
+    sn.split('_')
+        .map(|p| {
+            let mut c = p.chars();
+            c.next()
+                .map(|f| f.to_ascii_uppercase().to_string() + c.as_str())
+                .unwrap_or_default()
+        })
+        .collect()
 }
 
 /// Enums whose variants carry wire values are projected as plain strings in the
 /// bindings for now (napi enums can't carry arbitrary values cleanly).
-fn is_string_enum(api: &ApiDoc, name: &str) -> bool {
+fn is_string_enum(_api: &ApiDoc, name: &str) -> bool {
     // the api layer doesn't carry enum defs — the catalog does; the bindgen
     // caller passes the set of value-carrying enums via this convention:
-    matches!(name, "FileStatus" | "RefKind" | "PrState" | "IssueState" | "Mergeable")
+    matches!(
+        name,
+        "FileStatus" | "RefKind" | "PrState" | "IssueState" | "Mergeable"
+    )
 }
 
 /// Does this type mention the `bytes` scalar anywhere? Gates the per-language
@@ -68,9 +75,10 @@ fn mentions_bytes(t: &ApiType) -> bool {
 }
 
 fn api_uses_bytes(api: &ApiDoc) -> bool {
-    api.interfaces.iter().flat_map(|i| &i.ops).any(|op| {
-        mentions_bytes(&op.returns) || op.params.iter().any(|p| mentions_bytes(&p.ty))
-    })
+    api.interfaces
+        .iter()
+        .flat_map(|i| &i.ops)
+        .any(|op| mentions_bytes(&op.returns) || op.params.iter().any(|p| mentions_bytes(&p.ty)))
 }
 
 /// The field carrying an Arrow `RecordBatch`, when this model is an
@@ -79,7 +87,9 @@ fn api_uses_bytes(api: &ApiDoc) -> bool {
 /// with lazy per-language accessors — an IPC-bytes getter everywhere, plus the
 /// Arrow PyCapsule protocol in Python — so no encoding happens until asked for.
 fn arrow_field(m: &crate::api::ApiModel) -> Option<&crate::api::ApiField> {
-    m.fields.iter().find(|f| matches!(&f.ty, ApiType::Scalar(s) if s == "ArrowBatch"))
+    m.fields
+        .iter()
+        .find(|f| matches!(&f.ty, ApiType::Scalar(s) if s == "ArrowBatch"))
 }
 
 /// An [`ApiType`] as (rust type, ts type) strings. `bytes` maps to the `Bytes`
@@ -124,7 +134,11 @@ fn param_sig(api: &ApiDoc, op: &ApiOp) -> Vec<(String, String)> {
         .iter()
         .map(|p| {
             let (r, _) = ty(api, &p.ty);
-            let r = if p.optional == Some(true) { format!("Option<{r}>") } else { r };
+            let r = if p.optional == Some(true) {
+                format!("Option<{r}>")
+            } else {
+                r
+            };
             (snake(&p.name), r)
         })
         .collect()
@@ -134,8 +148,10 @@ fn param_sig(api: &ApiDoc, op: &ApiOp) -> Vec<(String, String)> {
 /// per-op emission loop opens with.
 fn op_sig(api: &ApiDoc, op: &ApiOp) -> (String, String, String) {
     let name = snake(&op.name);
-    let params: Vec<String> =
-        param_sig(api, op).iter().map(|(n, r)| format!("{n}: {r}")).collect();
+    let params: Vec<String> = param_sig(api, op)
+        .iter()
+        .map(|(n, r)| format!("{n}: {r}"))
+        .collect();
     let (ret, _) = ty(api, &op.returns);
     (name, params.join(", "), ret)
 }

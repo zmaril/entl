@@ -12,6 +12,7 @@ pub mod catalog;
 pub mod codegen;
 pub mod data;
 pub mod ir;
+pub mod rustfmt;
 pub mod sql;
 
 pub use catalog::{load_catalog, load_catalog_file, Diagnostics};

@@ -22,7 +22,10 @@ pub struct TableSchema {
 
 /// The Postgres projection of every physical table in the catalog.
 pub const PG_TABLES: &[TableSchema] = &[
-    TableSchema { name: "blobs", pk: &["oid"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+    TableSchema {
+        name: "blobs",
+        pk: &["oid"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "oid" text PRIMARY KEY,
   "repo_id" text NOT NULL,
   "size" bigint NOT NULL,
@@ -31,15 +34,23 @@ pub const PG_TABLES: &[TableSchema] = &[
   "content_sha" text,
   "content" text
 );
-"# },
-    TableSchema { name: "commit_parents", pk: &["commit_oid", "idx"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "commit_parents",
+        pk: &["commit_oid", "idx"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "commit_oid" text NOT NULL,
   "idx" integer NOT NULL,
   "parent_oid" text NOT NULL,
   PRIMARY KEY ("commit_oid", "idx")
 );
-"# },
-    TableSchema { name: "commits", pk: &["oid"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "commits",
+        pk: &["oid"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "oid" text PRIMARY KEY,
   "repo_id" text NOT NULL,
   "tree_oid" text NOT NULL,
@@ -57,16 +68,24 @@ pub const PG_TABLES: &[TableSchema] = &[
   "is_merge" boolean DEFAULT false NOT NULL,
   "gpg_signed" boolean DEFAULT false NOT NULL
 );
-"# },
-    TableSchema { name: "conflicts", pk: &["repo_id", "merge_oid", "path"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "conflicts",
+        pk: &["repo_id", "merge_oid", "path"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "merge_oid" text NOT NULL,
   "path" text NOT NULL,
   "unresolved" boolean NOT NULL,
   PRIMARY KEY ("repo_id", "merge_oid", "path")
 );
-"# },
-    TableSchema { name: "file_changes", pk: &["commit_oid", "path"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "file_changes",
+        pk: &["commit_oid", "path"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "commit_oid" text NOT NULL,
   "path" text NOT NULL,
   "old_path" text,
@@ -77,16 +96,24 @@ pub const PG_TABLES: &[TableSchema] = &[
   "old_blob_oid" text,
   PRIMARY KEY ("commit_oid", "path")
 );
-"# },
-    TableSchema { name: "gh_assignees", pk: &["repo_id", "subject_type", "subject_number", "user_id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_assignees",
+        pk: &["repo_id", "subject_type", "subject_number", "user_id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "subject_type" text NOT NULL,
   "subject_number" integer NOT NULL,
   "user_id" bigint NOT NULL,
   PRIMARY KEY ("repo_id", "subject_type", "subject_number", "user_id")
 );
-"# },
-    TableSchema { name: "gh_check_runs", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_check_runs",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" bigint PRIMARY KEY,
   "repo_id" text NOT NULL,
   "commit_oid" text,
@@ -96,8 +123,12 @@ pub const PG_TABLES: &[TableSchema] = &[
   "started_at" timestamptz,
   "completed_at" timestamptz
 );
-"# },
-    TableSchema { name: "gh_comments", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_comments",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" bigint PRIMARY KEY,
   "subject_type" text NOT NULL,
   "repo_id" text NOT NULL,
@@ -106,8 +137,12 @@ pub const PG_TABLES: &[TableSchema] = &[
   "body" text,
   "created_at" timestamptz
 );
-"# },
-    TableSchema { name: "gh_commit_statuses", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_commit_statuses",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" bigint PRIMARY KEY,
   "repo_id" text NOT NULL,
   "commit_oid" text NOT NULL,
@@ -117,8 +152,12 @@ pub const PG_TABLES: &[TableSchema] = &[
   "target_url" text,
   "created_at" timestamptz
 );
-"# },
-    TableSchema { name: "gh_events", pk: &["repo_id", "id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_events",
+        pk: &["repo_id", "id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "id" text NOT NULL,
   "type" text,
@@ -128,8 +167,12 @@ pub const PG_TABLES: &[TableSchema] = &[
   "payload" text,
   PRIMARY KEY ("repo_id", "id")
 );
-"# },
-    TableSchema { name: "gh_issues", pk: &["repo_id", "number"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_issues",
+        pk: &["repo_id", "number"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "number" integer NOT NULL,
   "title" text,
@@ -141,8 +184,12 @@ pub const PG_TABLES: &[TableSchema] = &[
   "closed_at" timestamptz,
   PRIMARY KEY ("repo_id", "number")
 );
-"# },
-    TableSchema { name: "gh_jobs", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_jobs",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" bigint PRIMARY KEY,
   "run_id" bigint NOT NULL,
   "name" text,
@@ -152,31 +199,47 @@ pub const PG_TABLES: &[TableSchema] = &[
   "completed_at" timestamptz,
   "runner_name" text
 );
-"# },
-    TableSchema { name: "gh_labeled", pk: &["repo_id", "subject_type", "subject_number", "label_name"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_labeled",
+        pk: &["repo_id", "subject_type", "subject_number", "label_name"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "subject_type" text NOT NULL,
   "subject_number" integer NOT NULL,
   "label_name" text NOT NULL,
   PRIMARY KEY ("repo_id", "subject_type", "subject_number", "label_name")
 );
-"# },
-    TableSchema { name: "gh_labels", pk: &["repo_id", "name"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_labels",
+        pk: &["repo_id", "name"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "name" text NOT NULL,
   "color" text,
   "description" text,
   PRIMARY KEY ("repo_id", "name")
 );
-"# },
-    TableSchema { name: "gh_pr_commits", pk: &["repo_id", "pr_number", "commit_oid"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_pr_commits",
+        pk: &["repo_id", "pr_number", "commit_oid"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "pr_number" integer NOT NULL,
   "commit_oid" text NOT NULL,
   PRIMARY KEY ("repo_id", "pr_number", "commit_oid")
 );
-"# },
-    TableSchema { name: "gh_pr_reviews", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_pr_reviews",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" bigint PRIMARY KEY,
   "repo_id" text NOT NULL,
   "pr_number" integer NOT NULL,
@@ -185,8 +248,12 @@ pub const PG_TABLES: &[TableSchema] = &[
   "submitted_at" timestamptz,
   "body" text
 );
-"# },
-    TableSchema { name: "gh_pull_requests", pk: &["repo_id", "number"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_pull_requests",
+        pk: &["repo_id", "number"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "number" integer NOT NULL,
   "title" text,
@@ -210,15 +277,23 @@ pub const PG_TABLES: &[TableSchema] = &[
   "base_oid" text,
   PRIMARY KEY ("repo_id", "number")
 );
-"# },
-    TableSchema { name: "gh_requested_reviewers", pk: &["repo_id", "pr_number", "user_id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_requested_reviewers",
+        pk: &["repo_id", "pr_number", "user_id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "pr_number" integer NOT NULL,
   "user_id" bigint NOT NULL,
   PRIMARY KEY ("repo_id", "pr_number", "user_id")
 );
-"# },
-    TableSchema { name: "gh_review_comments", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_review_comments",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" bigint PRIMARY KEY,
   "repo_id" text NOT NULL,
   "pr_number" integer NOT NULL,
@@ -231,8 +306,12 @@ pub const PG_TABLES: &[TableSchema] = &[
   "created_at" timestamptz,
   "in_reply_to" bigint
 );
-"# },
-    TableSchema { name: "gh_steps", pk: &["job_id", "number"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_steps",
+        pk: &["job_id", "number"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "job_id" bigint NOT NULL,
   "number" integer NOT NULL,
   "name" text,
@@ -242,15 +321,23 @@ pub const PG_TABLES: &[TableSchema] = &[
   "completed_at" timestamptz,
   PRIMARY KEY ("job_id", "number")
 );
-"# },
-    TableSchema { name: "gh_users", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_users",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" bigint PRIMARY KEY,
   "login" text NOT NULL,
   "type" text,
   "name" text
 );
-"# },
-    TableSchema { name: "gh_workflow_runs", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_workflow_runs",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" bigint PRIMARY KEY,
   "repo_id" text NOT NULL,
   "workflow_id" bigint,
@@ -265,24 +352,36 @@ pub const PG_TABLES: &[TableSchema] = &[
   "updated_at" timestamptz,
   "run_started_at" timestamptz
 );
-"# },
-    TableSchema { name: "gh_workflows", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_workflows",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" bigint PRIMARY KEY,
   "repo_id" text NOT NULL,
   "name" text,
   "path" text,
   "state" text
 );
-"# },
-    TableSchema { name: "git_notes", pk: &["repo_id", "notes_ref", "annotated_oid"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "git_notes",
+        pk: &["repo_id", "notes_ref", "annotated_oid"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "notes_ref" text NOT NULL,
   "annotated_oid" text NOT NULL,
   "note" text NOT NULL,
   PRIMARY KEY ("repo_id", "notes_ref", "annotated_oid")
 );
-"# },
-    TableSchema { name: "refs", pk: &["repo_id", "name"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "refs",
+        pk: &["repo_id", "name"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "name" text NOT NULL,
   "kind" text NOT NULL,
@@ -291,8 +390,12 @@ pub const PG_TABLES: &[TableSchema] = &[
   "upstream" text,
   PRIMARY KEY ("repo_id", "name")
 );
-"# },
-    TableSchema { name: "repos", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "repos",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" text PRIMARY KEY,
   "path" text NOT NULL,
   "remote_url" text,
@@ -304,8 +407,12 @@ pub const PG_TABLES: &[TableSchema] = &[
   "first_synced_at" timestamptz,
   "last_synced_at" timestamptz
 );
-"# },
-    TableSchema { name: "sync_state", pk: &["resource"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "sync_state",
+        pk: &["resource"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "resource" text PRIMARY KEY,
   "cursor" text,
   "etag" text,
@@ -313,8 +420,12 @@ pub const PG_TABLES: &[TableSchema] = &[
   "last_synced_at" timestamptz,
   "last_error" text
 );
-"# },
-    TableSchema { name: "tree_entries", pk: &["tree_oid", "name"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "tree_entries",
+        pk: &["tree_oid", "name"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "tree_oid" text NOT NULL,
   "name" text NOT NULL,
   "path" text NOT NULL,
@@ -323,17 +434,25 @@ pub const PG_TABLES: &[TableSchema] = &[
   "child_oid" text NOT NULL,
   PRIMARY KEY ("tree_oid", "name")
 );
-"# },
-    TableSchema { name: "trees", pk: &["oid"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "trees",
+        pk: &["oid"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "oid" text PRIMARY KEY,
   "repo_id" text NOT NULL
 );
-"# },
+"#,
+    },
 ];
 
 /// The Sqlite projection of every physical table in the catalog.
 pub const SQLITE_TABLES: &[TableSchema] = &[
-    TableSchema { name: "blobs", pk: &["oid"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+    TableSchema {
+        name: "blobs",
+        pk: &["oid"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "oid" text PRIMARY KEY,
   "repo_id" text NOT NULL,
   "size" integer NOT NULL,
@@ -342,15 +461,23 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "content_sha" text,
   "content" text
 );
-"# },
-    TableSchema { name: "commit_parents", pk: &["commit_oid", "idx"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "commit_parents",
+        pk: &["commit_oid", "idx"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "commit_oid" text NOT NULL,
   "idx" integer NOT NULL,
   "parent_oid" text NOT NULL,
   PRIMARY KEY ("commit_oid", "idx")
 );
-"# },
-    TableSchema { name: "commits", pk: &["oid"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "commits",
+        pk: &["oid"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "oid" text PRIMARY KEY,
   "repo_id" text NOT NULL,
   "tree_oid" text NOT NULL,
@@ -368,16 +495,24 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "is_merge" integer DEFAULT false NOT NULL,
   "gpg_signed" integer DEFAULT false NOT NULL
 );
-"# },
-    TableSchema { name: "conflicts", pk: &["repo_id", "merge_oid", "path"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "conflicts",
+        pk: &["repo_id", "merge_oid", "path"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "merge_oid" text NOT NULL,
   "path" text NOT NULL,
   "unresolved" integer NOT NULL,
   PRIMARY KEY ("repo_id", "merge_oid", "path")
 );
-"# },
-    TableSchema { name: "file_changes", pk: &["commit_oid", "path"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "file_changes",
+        pk: &["commit_oid", "path"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "commit_oid" text NOT NULL,
   "path" text NOT NULL,
   "old_path" text,
@@ -388,16 +523,24 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "old_blob_oid" text,
   PRIMARY KEY ("commit_oid", "path")
 );
-"# },
-    TableSchema { name: "gh_assignees", pk: &["repo_id", "subject_type", "subject_number", "user_id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_assignees",
+        pk: &["repo_id", "subject_type", "subject_number", "user_id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "subject_type" text NOT NULL,
   "subject_number" integer NOT NULL,
   "user_id" integer NOT NULL,
   PRIMARY KEY ("repo_id", "subject_type", "subject_number", "user_id")
 );
-"# },
-    TableSchema { name: "gh_check_runs", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_check_runs",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" integer PRIMARY KEY,
   "repo_id" text NOT NULL,
   "commit_oid" text,
@@ -407,8 +550,12 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "started_at" text,
   "completed_at" text
 );
-"# },
-    TableSchema { name: "gh_comments", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_comments",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" integer PRIMARY KEY,
   "subject_type" text NOT NULL,
   "repo_id" text NOT NULL,
@@ -417,8 +564,12 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "body" text,
   "created_at" text
 );
-"# },
-    TableSchema { name: "gh_commit_statuses", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_commit_statuses",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" integer PRIMARY KEY,
   "repo_id" text NOT NULL,
   "commit_oid" text NOT NULL,
@@ -428,8 +579,12 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "target_url" text,
   "created_at" text
 );
-"# },
-    TableSchema { name: "gh_events", pk: &["repo_id", "id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_events",
+        pk: &["repo_id", "id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "id" text NOT NULL,
   "type" text,
@@ -439,8 +594,12 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "payload" text,
   PRIMARY KEY ("repo_id", "id")
 );
-"# },
-    TableSchema { name: "gh_issues", pk: &["repo_id", "number"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_issues",
+        pk: &["repo_id", "number"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "number" integer NOT NULL,
   "title" text,
@@ -452,8 +611,12 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "closed_at" text,
   PRIMARY KEY ("repo_id", "number")
 );
-"# },
-    TableSchema { name: "gh_jobs", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_jobs",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" integer PRIMARY KEY,
   "run_id" integer NOT NULL,
   "name" text,
@@ -463,31 +626,47 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "completed_at" text,
   "runner_name" text
 );
-"# },
-    TableSchema { name: "gh_labeled", pk: &["repo_id", "subject_type", "subject_number", "label_name"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_labeled",
+        pk: &["repo_id", "subject_type", "subject_number", "label_name"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "subject_type" text NOT NULL,
   "subject_number" integer NOT NULL,
   "label_name" text NOT NULL,
   PRIMARY KEY ("repo_id", "subject_type", "subject_number", "label_name")
 );
-"# },
-    TableSchema { name: "gh_labels", pk: &["repo_id", "name"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_labels",
+        pk: &["repo_id", "name"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "name" text NOT NULL,
   "color" text,
   "description" text,
   PRIMARY KEY ("repo_id", "name")
 );
-"# },
-    TableSchema { name: "gh_pr_commits", pk: &["repo_id", "pr_number", "commit_oid"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_pr_commits",
+        pk: &["repo_id", "pr_number", "commit_oid"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "pr_number" integer NOT NULL,
   "commit_oid" text NOT NULL,
   PRIMARY KEY ("repo_id", "pr_number", "commit_oid")
 );
-"# },
-    TableSchema { name: "gh_pr_reviews", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_pr_reviews",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" integer PRIMARY KEY,
   "repo_id" text NOT NULL,
   "pr_number" integer NOT NULL,
@@ -496,8 +675,12 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "submitted_at" text,
   "body" text
 );
-"# },
-    TableSchema { name: "gh_pull_requests", pk: &["repo_id", "number"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_pull_requests",
+        pk: &["repo_id", "number"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "number" integer NOT NULL,
   "title" text,
@@ -521,15 +704,23 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "base_oid" text,
   PRIMARY KEY ("repo_id", "number")
 );
-"# },
-    TableSchema { name: "gh_requested_reviewers", pk: &["repo_id", "pr_number", "user_id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_requested_reviewers",
+        pk: &["repo_id", "pr_number", "user_id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "pr_number" integer NOT NULL,
   "user_id" integer NOT NULL,
   PRIMARY KEY ("repo_id", "pr_number", "user_id")
 );
-"# },
-    TableSchema { name: "gh_review_comments", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_review_comments",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" integer PRIMARY KEY,
   "repo_id" text NOT NULL,
   "pr_number" integer NOT NULL,
@@ -542,8 +733,12 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "created_at" text,
   "in_reply_to" integer
 );
-"# },
-    TableSchema { name: "gh_steps", pk: &["job_id", "number"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_steps",
+        pk: &["job_id", "number"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "job_id" integer NOT NULL,
   "number" integer NOT NULL,
   "name" text,
@@ -553,15 +748,23 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "completed_at" text,
   PRIMARY KEY ("job_id", "number")
 );
-"# },
-    TableSchema { name: "gh_users", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_users",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" integer PRIMARY KEY,
   "login" text NOT NULL,
   "type" text,
   "name" text
 );
-"# },
-    TableSchema { name: "gh_workflow_runs", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_workflow_runs",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" integer PRIMARY KEY,
   "repo_id" text NOT NULL,
   "workflow_id" integer,
@@ -576,24 +779,36 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "updated_at" text,
   "run_started_at" text
 );
-"# },
-    TableSchema { name: "gh_workflows", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_workflows",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" integer PRIMARY KEY,
   "repo_id" text NOT NULL,
   "name" text,
   "path" text,
   "state" text
 );
-"# },
-    TableSchema { name: "git_notes", pk: &["repo_id", "notes_ref", "annotated_oid"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "git_notes",
+        pk: &["repo_id", "notes_ref", "annotated_oid"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "notes_ref" text NOT NULL,
   "annotated_oid" text NOT NULL,
   "note" text NOT NULL,
   PRIMARY KEY ("repo_id", "notes_ref", "annotated_oid")
 );
-"# },
-    TableSchema { name: "refs", pk: &["repo_id", "name"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "refs",
+        pk: &["repo_id", "name"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "name" text NOT NULL,
   "kind" text NOT NULL,
@@ -602,8 +817,12 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "upstream" text,
   PRIMARY KEY ("repo_id", "name")
 );
-"# },
-    TableSchema { name: "repos", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "repos",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" text PRIMARY KEY,
   "path" text NOT NULL,
   "remote_url" text,
@@ -615,8 +834,12 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "first_synced_at" text,
   "last_synced_at" text
 );
-"# },
-    TableSchema { name: "sync_state", pk: &["resource"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "sync_state",
+        pk: &["resource"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "resource" text PRIMARY KEY,
   "cursor" text,
   "etag" text,
@@ -624,8 +847,12 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "last_synced_at" text,
   "last_error" text
 );
-"# },
-    TableSchema { name: "tree_entries", pk: &["tree_oid", "name"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "tree_entries",
+        pk: &["tree_oid", "name"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "tree_oid" text NOT NULL,
   "name" text NOT NULL,
   "path" text NOT NULL,
@@ -634,17 +861,25 @@ pub const SQLITE_TABLES: &[TableSchema] = &[
   "child_oid" text NOT NULL,
   PRIMARY KEY ("tree_oid", "name")
 );
-"# },
-    TableSchema { name: "trees", pk: &["oid"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "trees",
+        pk: &["oid"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "oid" text PRIMARY KEY,
   "repo_id" text NOT NULL
 );
-"# },
+"#,
+    },
 ];
 
 /// The Duckdb projection of every physical table in the catalog.
 pub const DUCKDB_TABLES: &[TableSchema] = &[
-    TableSchema { name: "blobs", pk: &["oid"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+    TableSchema {
+        name: "blobs",
+        pk: &["oid"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "oid" blob PRIMARY KEY,
   "repo_id" text NOT NULL,
   "size" bigint NOT NULL,
@@ -653,15 +888,23 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "content_sha" text,
   "content" blob
 );
-"# },
-    TableSchema { name: "commit_parents", pk: &["commit_oid", "idx"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "commit_parents",
+        pk: &["commit_oid", "idx"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "commit_oid" blob NOT NULL,
   "idx" integer NOT NULL,
   "parent_oid" blob NOT NULL,
   PRIMARY KEY ("commit_oid", "idx")
 );
-"# },
-    TableSchema { name: "commits", pk: &["oid"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "commits",
+        pk: &["oid"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "oid" blob PRIMARY KEY,
   "repo_id" text NOT NULL,
   "tree_oid" blob NOT NULL,
@@ -679,16 +922,24 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "is_merge" boolean DEFAULT false NOT NULL,
   "gpg_signed" boolean DEFAULT false NOT NULL
 );
-"# },
-    TableSchema { name: "conflicts", pk: &["repo_id", "merge_oid", "path"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "conflicts",
+        pk: &["repo_id", "merge_oid", "path"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "merge_oid" text NOT NULL,
   "path" text NOT NULL,
   "unresolved" boolean NOT NULL,
   PRIMARY KEY ("repo_id", "merge_oid", "path")
 );
-"# },
-    TableSchema { name: "file_changes", pk: &["commit_oid", "path"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "file_changes",
+        pk: &["commit_oid", "path"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "commit_oid" blob NOT NULL,
   "path" text NOT NULL,
   "old_path" text,
@@ -699,16 +950,24 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "old_blob_oid" blob,
   PRIMARY KEY ("commit_oid", "path")
 );
-"# },
-    TableSchema { name: "gh_assignees", pk: &["repo_id", "subject_type", "subject_number", "user_id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_assignees",
+        pk: &["repo_id", "subject_type", "subject_number", "user_id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "subject_type" text NOT NULL,
   "subject_number" integer NOT NULL,
   "user_id" bigint NOT NULL,
   PRIMARY KEY ("repo_id", "subject_type", "subject_number", "user_id")
 );
-"# },
-    TableSchema { name: "gh_check_runs", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_check_runs",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" bigint PRIMARY KEY,
   "repo_id" text NOT NULL,
   "commit_oid" blob,
@@ -718,8 +977,12 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "started_at" timestamp,
   "completed_at" timestamp
 );
-"# },
-    TableSchema { name: "gh_comments", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_comments",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" bigint PRIMARY KEY,
   "subject_type" text NOT NULL,
   "repo_id" text NOT NULL,
@@ -728,8 +991,12 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "body" text,
   "created_at" timestamp
 );
-"# },
-    TableSchema { name: "gh_commit_statuses", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_commit_statuses",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" bigint PRIMARY KEY,
   "repo_id" text NOT NULL,
   "commit_oid" blob NOT NULL,
@@ -739,8 +1006,12 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "target_url" text,
   "created_at" timestamp
 );
-"# },
-    TableSchema { name: "gh_events", pk: &["repo_id", "id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_events",
+        pk: &["repo_id", "id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "id" text NOT NULL,
   "type" text,
@@ -750,8 +1021,12 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "payload" text,
   PRIMARY KEY ("repo_id", "id")
 );
-"# },
-    TableSchema { name: "gh_issues", pk: &["repo_id", "number"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_issues",
+        pk: &["repo_id", "number"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "number" integer NOT NULL,
   "title" text,
@@ -763,8 +1038,12 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "closed_at" timestamp,
   PRIMARY KEY ("repo_id", "number")
 );
-"# },
-    TableSchema { name: "gh_jobs", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_jobs",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" bigint PRIMARY KEY,
   "run_id" bigint NOT NULL,
   "name" text,
@@ -774,31 +1053,47 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "completed_at" timestamp,
   "runner_name" text
 );
-"# },
-    TableSchema { name: "gh_labeled", pk: &["repo_id", "subject_type", "subject_number", "label_name"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_labeled",
+        pk: &["repo_id", "subject_type", "subject_number", "label_name"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "subject_type" text NOT NULL,
   "subject_number" integer NOT NULL,
   "label_name" text NOT NULL,
   PRIMARY KEY ("repo_id", "subject_type", "subject_number", "label_name")
 );
-"# },
-    TableSchema { name: "gh_labels", pk: &["repo_id", "name"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_labels",
+        pk: &["repo_id", "name"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "name" text NOT NULL,
   "color" text,
   "description" text,
   PRIMARY KEY ("repo_id", "name")
 );
-"# },
-    TableSchema { name: "gh_pr_commits", pk: &["repo_id", "pr_number", "commit_oid"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_pr_commits",
+        pk: &["repo_id", "pr_number", "commit_oid"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "pr_number" integer NOT NULL,
   "commit_oid" blob NOT NULL,
   PRIMARY KEY ("repo_id", "pr_number", "commit_oid")
 );
-"# },
-    TableSchema { name: "gh_pr_reviews", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_pr_reviews",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" bigint PRIMARY KEY,
   "repo_id" text NOT NULL,
   "pr_number" integer NOT NULL,
@@ -807,8 +1102,12 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "submitted_at" timestamp,
   "body" text
 );
-"# },
-    TableSchema { name: "gh_pull_requests", pk: &["repo_id", "number"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_pull_requests",
+        pk: &["repo_id", "number"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "number" integer NOT NULL,
   "title" text,
@@ -832,15 +1131,23 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "base_oid" blob,
   PRIMARY KEY ("repo_id", "number")
 );
-"# },
-    TableSchema { name: "gh_requested_reviewers", pk: &["repo_id", "pr_number", "user_id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_requested_reviewers",
+        pk: &["repo_id", "pr_number", "user_id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "pr_number" integer NOT NULL,
   "user_id" bigint NOT NULL,
   PRIMARY KEY ("repo_id", "pr_number", "user_id")
 );
-"# },
-    TableSchema { name: "gh_review_comments", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_review_comments",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" bigint PRIMARY KEY,
   "repo_id" text NOT NULL,
   "pr_number" integer NOT NULL,
@@ -853,8 +1160,12 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "created_at" timestamp,
   "in_reply_to" bigint
 );
-"# },
-    TableSchema { name: "gh_steps", pk: &["job_id", "number"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_steps",
+        pk: &["job_id", "number"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "job_id" bigint NOT NULL,
   "number" integer NOT NULL,
   "name" text,
@@ -864,15 +1175,23 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "completed_at" timestamp,
   PRIMARY KEY ("job_id", "number")
 );
-"# },
-    TableSchema { name: "gh_users", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_users",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" bigint PRIMARY KEY,
   "login" text NOT NULL,
   "type" text,
   "name" text
 );
-"# },
-    TableSchema { name: "gh_workflow_runs", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_workflow_runs",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" bigint PRIMARY KEY,
   "repo_id" text NOT NULL,
   "workflow_id" bigint,
@@ -887,24 +1206,36 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "updated_at" timestamp,
   "run_started_at" timestamp
 );
-"# },
-    TableSchema { name: "gh_workflows", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "gh_workflows",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" bigint PRIMARY KEY,
   "repo_id" text NOT NULL,
   "name" text,
   "path" text,
   "state" text
 );
-"# },
-    TableSchema { name: "git_notes", pk: &["repo_id", "notes_ref", "annotated_oid"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "git_notes",
+        pk: &["repo_id", "notes_ref", "annotated_oid"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "notes_ref" text NOT NULL,
   "annotated_oid" blob NOT NULL,
   "note" text NOT NULL,
   PRIMARY KEY ("repo_id", "notes_ref", "annotated_oid")
 );
-"# },
-    TableSchema { name: "refs", pk: &["repo_id", "name"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "refs",
+        pk: &["repo_id", "name"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "repo_id" text NOT NULL,
   "name" text NOT NULL,
   "kind" text NOT NULL,
@@ -913,8 +1244,12 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "upstream" text,
   PRIMARY KEY ("repo_id", "name")
 );
-"# },
-    TableSchema { name: "repos", pk: &["id"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "repos",
+        pk: &["id"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "id" text PRIMARY KEY,
   "path" text NOT NULL,
   "remote_url" text,
@@ -926,8 +1261,12 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "first_synced_at" timestamp,
   "last_synced_at" timestamp
 );
-"# },
-    TableSchema { name: "sync_state", pk: &["resource"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "sync_state",
+        pk: &["resource"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "resource" text PRIMARY KEY,
   "cursor" text,
   "etag" text,
@@ -935,8 +1274,12 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "last_synced_at" timestamp,
   "last_error" text
 );
-"# },
-    TableSchema { name: "tree_entries", pk: &["tree_oid", "name"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "tree_entries",
+        pk: &["tree_oid", "name"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "tree_oid" blob NOT NULL,
   "name" text NOT NULL,
   "path" text NOT NULL,
@@ -945,12 +1288,17 @@ pub const DUCKDB_TABLES: &[TableSchema] = &[
   "child_oid" blob NOT NULL,
   PRIMARY KEY ("tree_oid", "name")
 );
-"# },
-    TableSchema { name: "trees", pk: &["oid"], ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
+"#,
+    },
+    TableSchema {
+        name: "trees",
+        pk: &["oid"],
+        ddl: r#"CREATE TABLE IF NOT EXISTS "__table__" (
   "oid" blob PRIMARY KEY,
   "repo_id" text NOT NULL
 );
-"# },
+"#,
+    },
 ];
 
 /// Every BOOLEAN `(table, column)` in the schema — for coercing SQLite's 0/1.

@@ -31,10 +31,16 @@ fn sorted_strs(mut v: Vec<String>) -> Value {
 /// Canonical form of the *generated* forge (resolve indices → ids/oids).
 pub fn canonical_forge(w: &ForgeWorld, oids: &[String]) -> Value {
     let oid = |i: usize| -> String {
-        if oids.is_empty() { String::new() } else { oids[i % oids.len()].clone() }
+        if oids.is_empty() {
+            String::new()
+        } else {
+            oids[i % oids.len()].clone()
+        }
     };
     let uid = |idx: Option<usize>| -> Value {
-        idx.and_then(|i| w.users.get(i)).map(|u| Value::from(u.id)).unwrap_or(Value::Null)
+        idx.and_then(|i| w.users.get(i))
+            .map(|u| Value::from(u.id))
+            .unwrap_or(Value::Null)
     };
     let oid_opt = |idx: Option<usize>| idx.map(|i| Value::String(oid(i))).unwrap_or(Value::Null);
     let lname = |i: usize| w.labels.get(i).map(|l| l.name.clone()).unwrap_or_default();
@@ -65,8 +71,15 @@ pub fn canonical_forge(w: &ForgeWorld, oids: &[String]) -> Value {
         "labels": sorted_strs(i.labels.iter().map(|&x| lname(x)).collect()),
     })).collect());
 
-    let events = sorted(w.events.iter().map(|e| json!({
-        "id": e.id, "type": e.typ, "actor_id": uid(e.actor) })).collect());
+    let events = sorted(
+        w.events
+            .iter()
+            .map(|e| {
+                json!({
+        "id": e.id, "type": e.typ, "actor_id": uid(e.actor) })
+            })
+            .collect(),
+    );
 
     // The users/labels *pools* may contain entries no PR/issue references; the ingest only stores
     // referenced ones (covered by the store round-trip), so they're excluded here.
@@ -90,7 +103,11 @@ pub fn canonical_store(snap: &Snapshot) -> Value {
     let empty = Vec::new();
     let rows = |t: &str| snap.get(t).unwrap_or(&empty).as_slice();
     let strs = |it: Vec<&Row>, col: &str| -> Value {
-        sorted_strs(it.iter().filter_map(|r| r.get(col).and_then(Value::as_str).map(str::to_string)).collect())
+        sorted_strs(
+            it.iter()
+                .filter_map(|r| r.get(col).and_then(Value::as_str).map(str::to_string))
+                .collect(),
+        )
     };
 
     let pulls = sorted(rows("gh_pull_requests").iter().map(|r| {
@@ -124,8 +141,15 @@ pub fn canonical_store(snap: &Snapshot) -> Value {
         })
     }).collect());
 
-    let events = sorted(rows("gh_events").iter().map(|r| json!({
-        "id": gv(r, "id"), "type": gv(r, "type"), "actor_id": gv(r, "actor_id") })).collect());
+    let events = sorted(
+        rows("gh_events")
+            .iter()
+            .map(|r| {
+                json!({
+        "id": gv(r, "id"), "type": gv(r, "type"), "actor_id": gv(r, "actor_id") })
+            })
+            .collect(),
+    );
 
     json!({ "pulls": pulls, "issues": issues, "events": events })
 }

@@ -56,9 +56,35 @@ fn arb_pr() -> impl Strategy<Value = RawPr> {
         prop::collection::vec((0usize..8, 0usize..8), 0..2),
         any::<bool>(),
     )
-        .prop_map(|(author, state, draft, dt, labels, commits, reviews, reviewers, comments, rcomments, rollup)| {
-            RawPr { author, state, draft, dt, labels, commits, reviews, reviewers, comments, rcomments, rollup }
-        })
+        .prop_map(
+            |(
+                author,
+                state,
+                draft,
+                dt,
+                labels,
+                commits,
+                reviews,
+                reviewers,
+                comments,
+                rcomments,
+                rollup,
+            )| {
+                RawPr {
+                    author,
+                    state,
+                    draft,
+                    dt,
+                    labels,
+                    commits,
+                    reviews,
+                    reviewers,
+                    comments,
+                    rcomments,
+                    rollup,
+                }
+            },
+        )
 }
 
 #[derive(Debug, Clone)]
@@ -76,7 +102,12 @@ fn arb_run() -> impl Strategy<Value = RawRun> {
         any::<bool>(),
         any::<bool>(),
     )
-        .prop_map(|(head, jobs, check, status)| RawRun { head, jobs, check, status })
+        .prop_map(|(head, jobs, check, status)| RawRun {
+            head,
+            jobs,
+            check,
+            status,
+        })
 }
 
 fn arb_issue() -> impl Strategy<Value = RawIssue> {
@@ -87,7 +118,13 @@ fn arb_issue() -> impl Strategy<Value = RawIssue> {
         prop::collection::vec(0usize..8, 0..3),
         prop::collection::vec(0usize..8, 0..3),
     )
-        .prop_map(|(author, open, dt, labels, comments)| RawIssue { author, open, dt, labels, comments })
+        .prop_map(|(author, open, dt, labels, comments)| RawIssue {
+            author,
+            open,
+            dt,
+            labels,
+            comments,
+        })
 }
 
 /// A valid random forge state: 1–4 users, up to 3 labels, up to 4 PRs / 4 issues (each with
@@ -156,7 +193,12 @@ fn build(
             let (state, closed_at, merged_at, merge_commit) = match p.state {
                 0 => ("OPEN".to_string(), None, None, None),
                 1 => ("CLOSED".to_string(), Some(rfc3339(updated)), None, None),
-                _ => ("MERGED".to_string(), Some(rfc3339(updated)), Some(rfc3339(updated)), Some(0usize)),
+                _ => (
+                    "MERGED".to_string(),
+                    Some(rfc3339(updated)),
+                    Some(rfc3339(updated)),
+                    Some(0usize),
+                ),
             };
             GhPull {
                 number,
@@ -191,7 +233,10 @@ fn build(
                     .into_iter()
                     .map(|(a, st)| GhReview {
                         id: next(),
-                        state: Some(["APPROVED", "CHANGES_REQUESTED", "COMMENTED"][st as usize % 3].to_string()),
+                        state: Some(
+                            ["APPROVED", "CHANGES_REQUESTED", "COMMENTED"][st as usize % 3]
+                                .to_string(),
+                        ),
                         submitted_at: Some(rfc3339(updated)),
                         body: Some("review".to_string()),
                         author: (nu > 0).then_some(a % nu),
@@ -238,7 +283,11 @@ fn build(
                 number,
                 title: Some(format!("Issue {number}")),
                 body: Some(format!("ibody {number}")),
-                state: if is.open { "OPEN".into() } else { "CLOSED".into() },
+                state: if is.open {
+                    "OPEN".into()
+                } else {
+                    "CLOSED".into()
+                },
                 created_at: rfc3339(created),
                 updated_at: rfc3339(updated),
                 closed_at: (!is.open).then(|| rfc3339(updated)),
@@ -298,7 +347,11 @@ fn build(
                     .collect(),
             })
             .collect();
-        let workflow_id = if workflows.is_empty() { next() } else { workflows[k % workflows.len()].id };
+        let workflow_id = if workflows.is_empty() {
+            next()
+        } else {
+            workflows[k % workflows.len()].id
+        };
         runs.push(GhRun {
             id: next(),
             workflow_id,
@@ -313,7 +366,12 @@ fn build(
         // Checks/statuses live on a run's head commit so the ingest (which only fetches them for
         // run head shas) actually pulls them.
         if rr.check {
-            checks.push(GhCheck { id: next(), commit: rr.head, name: "ci".into(), conclusion: Some("success".into()) });
+            checks.push(GhCheck {
+                id: next(),
+                commit: rr.head,
+                name: "ci".into(),
+                conclusion: Some("success".into()),
+            });
         }
         if rr.status {
             statuses.push(GhStatus {

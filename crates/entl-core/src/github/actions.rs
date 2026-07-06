@@ -37,9 +37,16 @@ pub async fn sync_actions(
         "DELETE FROM gh_jobs WHERE run_id IN (SELECT id FROM gh_workflow_runs WHERE repo_id = ?)",
         params![repo_id],
     )?;
-    for t in ["gh_workflow_runs", "gh_workflows", "gh_check_runs", "gh_commit_statuses"] {
-        db.conn
-            .execute(&format!("DELETE FROM {t} WHERE repo_id = ?"), params![repo_id])?;
+    for t in [
+        "gh_workflow_runs",
+        "gh_workflows",
+        "gh_check_runs",
+        "gh_commit_statuses",
+    ] {
+        db.conn.execute(
+            &format!("DELETE FROM {t} WHERE repo_id = ?"),
+            params![repo_id],
+        )?;
     }
 
     // --- workflows ---
