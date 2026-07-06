@@ -16,6 +16,18 @@ license = "MIT"
 [profile.release]
 lto = "thin"
 
+# Faster local/CI dev + test builds. `test` inherits `dev`, so this covers
+# `cargo test`/`nextest` too. Line tables keep backtraces readable while
+# skipping most debuginfo codegen; unpacked split-debuginfo skips the slow
+# dsymutil pass on macOS. Dependencies drop debuginfo entirely — you rarely
+# step through them, and it shrinks link time and the target dir noticeably.
+[profile.dev]
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
+[profile.dev.package."*"]
+debug = false
+
 # release + debug symbols, for profiling (samply/flamegraph). Build with
 # `cargo build --profile profiling`; binary at target/profiling/entl.
 [profile.profiling]

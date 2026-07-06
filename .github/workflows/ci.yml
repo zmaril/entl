@@ -71,9 +71,11 @@ jobs:
       # default members: entl-core, entl-cli. The schema tool (fluessig) lives in
       # its own repo now; the codegen drift guard runs in the `node` job below
       # (regenerate via the external tool, fail if any committed artifact changed).
-      - run: cargo test
+      - run: cargo nextest run
+      # nextest doesn't run doctests, so keep a dedicated (fast) pass for them
+      - run: cargo test --doc
       # the round-trip property tests (P1 store, P2 OID-exact, P3 forge)
-      - run: cargo test -p entl-testkit
+      - run: cargo nextest run -p entl-testkit
 
   node:
     name: node binding + codegen freshness
@@ -88,6 +90,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # Cache the bun + npm *download* stores (not node_modules) so the binding
+      # install and the externally-cloned fluessig codegen step skip re-fetching
+      # deps. Caching only the download caches keeps codegen output untouched, so
+      # it can't trip the freshness check below.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            ~/.npm
+          key: node-deps-${{ hashFiles('crates/entl-node/bun.lock') }}
+          restore-keys: node-deps-
       - name: build the napi addon
         working-directory: crates/entl-node
         run: |
@@ -197,7 +210,7 @@ jobs:
       - uses: ./.github/actions/rust-setup
       # the same P1/P2/P3 properties as the rust job, but with the Postgres
       # sink included (ENTL_TEST_PG gates it; embedded stores always run)
-      - run: cargo test -p entl-testkit
+      - run: cargo nextest run -p entl-testkit
         env:
           ENTL_TEST_PG: postgres://postgres:pg@localhost:5432/entl
 
