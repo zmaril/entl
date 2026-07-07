@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // Generates reference docs from the engine's own sources of truth:
-//   - reference/schema.mdx    ← crates/fluessig/schema_docs.json  (always; committed)
+//   - reference/schema.mdx    ← schema/schema_docs.json           (always; committed)
 //   - reference/rust-api.mdx  ← crates/entl-core/src/*.rs          (always; committed)
 //   - reference/node-api.mdx ← crates/entl-node/index.d.ts        (when present)
 //   - reference/cli.mdx       ← `target/release/entl --help`       (when built)
@@ -15,7 +15,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..", "..");
-const SCHEMA_DOCS = join(ROOT, "crates/fluessig/schema_docs.json");
+const SCHEMA_DOCS = join(ROOT, "schema/schema_docs.json");
 const CORE_SRC = join(ROOT, "crates/entl-core/src");
 const DTS = join(ROOT, "crates/entl-node/index.d.ts");
 const BIN = join(ROOT, "target/release/entl");
@@ -33,12 +33,10 @@ const mdxSafe = (s: string) => s.replace(/[{}]/g, "\\$&");
 type Col = { name: string; type: string; notNull: boolean; pk: boolean; def?: string; desc?: string };
 type Table = { name: string; cols: Col[]; desc?: string };
 
-// The schema reference as data: fluessig lowers the catalog (entl.tsp) into
-// crates/fluessig/schema_docs.json — per physical table, the columns with their
-// DuckDB types, flags, and the docs authored in entl.tsp. Regenerate with:
-//   cargo run -p fluessig --bin fluessig-gen -- \
-//     crates/fluessig/catalog.json crates/entl-core/src/schema_gen.rs \
-//     --docs crates/fluessig/schema_docs.json
+// The schema reference as data: fluessig lowers the catalog (schema/entl.tsp) into
+// schema/schema_docs.json — per physical table, the columns with their DuckDB
+// types, flags, and the docs authored in entl.tsp. Regenerate with `bun run gen`
+// in crates/entl-node (which runs scripts/gen.sh).
 function parseTables(): Table[] {
   type Raw = {
     name: string;
@@ -83,7 +81,7 @@ function genSchema(): string {
   const tables = parseTables();
   const gh = tables.filter((t) => t.name.startsWith("gh_"));
   const git = tables.filter((t) => !t.name.startsWith("gh_"));
-  return `${fm("Schema", "Every table Entl writes — generated from the fluessig catalog.")}${banner("crates/fluessig/schema_docs.json (lowered from crates/fluessig/entl.tsp)")}# Schema
+  return `${fm("Schema", "Every table Entl writes — generated from the fluessig catalog.")}${banner("schema/schema_docs.json (lowered from schema/entl.tsp)")}# Schema
 
 Entl writes one DuckDB. **git-generic** tables are bare (so a future forge reuses them);
 **GitHub** tables are namespaced \`gh_*\`. ${tables.length} tables in total.
