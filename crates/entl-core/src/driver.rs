@@ -22,9 +22,9 @@ use serde_json::Value;
 use std::time::Duration;
 
 // Schema + keys come from the GENERATED module `schema_gen` — the entl catalog
-// (crates/fluessig/entl.tsp) lowered to committed Rust source by fluessig-gen.
-// No runtime parsing/rendering: the schema is code (like tables.gen.ts /
-// models.py); a regenerates-identically test in fluessig guards drift.
+// (schema/entl.tsp) lowered to committed Rust source by fluessig-gen. No runtime
+// parsing/rendering: the schema is code (like tables.gen.ts / models.py); CI's
+// codegen-freshness job (the `node` job) regenerates + fails on drift.
 use crate::schema_gen::{TableSchema, PG_TABLES};
 
 /// The Postgres schema of a canonical table, from the generated catalog.
