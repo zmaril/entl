@@ -6,6 +6,17 @@ runs:
     - uses: dtolnay/rust-toolchain@stable
       with:
         components: clippy, rustfmt
+    # mold: a much faster linker than GNU ld. make-default swaps it in for every
+    # link step — Rust crates, build scripts, and the bundled C/C++ deps — with
+    # no per-crate rustflags. Linux-only, which is fine: all CI jobs run ubuntu.
+    - uses: rui314/setup-mold@v1
+      with:
+        make-default: true
+    # nextest: a faster, more parallel test runner (used by the rust + postgres
+    # jobs). Prebuilt binary, so the install is a couple of seconds.
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: nextest
     # One shared cache key across every CI job (rather than rust-cache's default
     # per-job key). The bundled-DuckDB dependency compile (~3 min) is identical
     # in all jobs, so a single shared cache means they restore it warm instead of
