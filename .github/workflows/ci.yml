@@ -100,7 +100,7 @@ jobs:
         env:
           # The schema tool lives in its own repo; pin the ref entl generates
           # against. Bump this when adopting a new fluessig release.
-          FLUESSIG_REF: main
+          FLUESSIG_REF: 57cb2c78c8ecd8d4b6e3b589848279d2eb368ce4
         run: |
           # Clone into RUNNER_TEMP (outside the workspace) so it can't register
           # as drift in the git-clean check below.
