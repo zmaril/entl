@@ -22,9 +22,9 @@ use serde_json::Value;
 use std::time::Duration;
 
 // Schema + keys come from the GENERATED module `schema_gen` — the entl catalog
-// (crates/fluessig/entl.tsp) lowered to committed Rust source by fluessig-gen.
-// No runtime parsing/rendering: the schema is code (like tables.gen.ts /
-// models.py); a regenerates-identically test in fluessig guards drift.
+// (schema/entl.tsp) lowered to committed Rust source by fluessig-gen. No runtime
+// parsing/rendering: the schema is code (like tables.gen.ts / models.py); CI's
+// codegen-freshness job (the `node` job) regenerates + fails on drift.
 use crate::schema_gen::{TableSchema, PG_TABLES};
 
 /// The Postgres schema of a canonical table, from the generated catalog.
@@ -109,7 +109,11 @@ impl<E: FnMut(Statement) -> Result<()>> DriverSink<E> {
         }
         if let (Some(s), false) = (self.schema.clone(), self.schema_made) {
             let sql = format!("CREATE SCHEMA IF NOT EXISTS \"{s}\"");
-            (self.emit)(Statement { sql, params: vec![], table: None })?;
+            (self.emit)(Statement {
+                sql,
+                params: vec![],
+                table: None,
+            })?;
             self.schema_made = true;
         }
         // Instantiate the table's DDL template at the (possibly renamed, schema-qualified) name.
@@ -120,14 +124,29 @@ impl<E: FnMut(Statement) -> Result<()>> DriverSink<E> {
         let pk = match table_schema(canonical) {
             Some(ts) => {
                 let ddl = ts.ddl.replace("__table__", &repl);
-                (self.emit)(Statement { sql: ddl, params: vec![], table: Some(canonical.to_string()) })?;
+                (self.emit)(Statement {
+                    sql: ddl,
+                    params: vec![],
+                    table: Some(canonical.to_string()),
+                })?;
                 ts.pk.iter().map(|s| s.to_string()).collect()
             }
             None => {
                 // Not in the catalog — a typeless create from the batch columns (all text), no PK.
-                let cols_ddl = cols.iter().map(|c| format!("\"{c}\" text")).collect::<Vec<_>>().join(", ");
-                let sql = format!("CREATE TABLE IF NOT EXISTS {} ({cols_ddl})", self.qualified(target));
-                (self.emit)(Statement { sql, params: vec![], table: Some(canonical.to_string()) })?;
+                let cols_ddl = cols
+                    .iter()
+                    .map(|c| format!("\"{c}\" text"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let sql = format!(
+                    "CREATE TABLE IF NOT EXISTS {} ({cols_ddl})",
+                    self.qualified(target)
+                );
+                (self.emit)(Statement {
+                    sql,
+                    params: vec![],
+                    table: Some(canonical.to_string()),
+                })?;
                 Vec::new()
             }
         };
@@ -146,19 +165,32 @@ impl<E: FnMut(Statement) -> Result<()>> Sink for DriverSink<E> {
 
         if batch.op == ChangeOp::Replace && self.cleared.insert(target.clone()) {
             let sql = format!("DELETE FROM {}", self.qualified(&target));
-            (self.emit)(Statement { sql, params: vec![], table: Some(batch.table.clone()) })?;
+            (self.emit)(Statement {
+                sql,
+                params: vec![],
+                table: Some(batch.table.clone()),
+            })?;
         }
 
         // One upsert per row; params in column order. Cache the SQL per target.
         if !self.insert_sql.contains_key(&target) {
-            let sql = crate::sink::upsert_sql(&self.qualified(&target), &cols, &pk, crate::sink::Ph::Dollar);
+            let sql = crate::sink::upsert_sql(
+                &self.qualified(&target),
+                &cols,
+                &pk,
+                crate::sink::Ph::Dollar,
+            );
             self.insert_sql.insert(target.clone(), sql);
         }
         let sql = self.insert_sql[&target].clone();
         let arr = batch.batch.columns();
         for i in 0..batch.batch.num_rows() {
             let params = arr.iter().map(|c| cell_json(c, i)).collect();
-            (self.emit)(Statement { sql: sql.clone(), params, table: Some(batch.table.clone()) })?;
+            (self.emit)(Statement {
+                sql: sql.clone(),
+                params,
+                table: Some(batch.table.clone()),
+            })?;
         }
         Ok(batch.batch.num_rows() as u64)
     }
@@ -205,8 +237,9 @@ pub fn statement_channel(capacity: usize) -> (Sender<Statement>, StatementStream
 /// store that's already populated, no repo or network needed.
 pub fn backfill(conn: &duckdb::Connection, sink: &mut dyn Sink, tables: &[&str]) -> Result<u64> {
     let present: HashSet<String> = {
-        let mut stmt = conn
-            .prepare("SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'")?;
+        let mut stmt = conn.prepare(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'",
+        )?;
         let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
         rows.collect::<duckdb::Result<_>>()?
     };
@@ -216,7 +249,8 @@ pub fn backfill(conn: &duckdb::Connection, sink: &mut dyn Sink, tables: &[&str])
             continue;
         }
         let mut stmt = conn.prepare(&format!("SELECT * FROM \"{t}\""))?;
-        let batches: Vec<duckdb::arrow::record_batch::RecordBatch> = stmt.query_arrow([])?.collect();
+        let batches: Vec<duckdb::arrow::record_batch::RecordBatch> =
+            stmt.query_arrow([])?.collect();
         for b in batches {
             total += sink.apply(&ChangeBatch::new(t, ChangeOp::Replace, b))?;
         }
@@ -243,8 +277,14 @@ mod tests {
     fn keys_come_from_the_generated_catalog() {
         // parse_pk is gone: the generated schema module is the source of truth for keys.
         assert_eq!(table_schema("commits").unwrap().pk, ["oid"]);
-        assert_eq!(table_schema("commit_parents").unwrap().pk, ["commit_oid", "idx"]);
-        assert_eq!(table_schema("gh_pull_requests").unwrap().pk, ["repo_id", "number"]);
+        assert_eq!(
+            table_schema("commit_parents").unwrap().pk,
+            ["commit_oid", "idx"]
+        );
+        assert_eq!(
+            table_schema("gh_pull_requests").unwrap().pk,
+            ["repo_id", "number"]
+        );
         // and the backfill set is catalog-driven (all 29 physical tables)
         assert_eq!(driver_tables().len(), 29);
     }
@@ -268,9 +308,13 @@ mod tests {
                     Ok(())
                 },
                 Dialect::Postgres,
-                SinkSelect { schema: Some("mine".into()), ..Default::default() },
+                SinkSelect {
+                    schema: Some("mine".into()),
+                    ..Default::default()
+                },
             );
-            sink.apply(&ChangeBatch::new("commits", ChangeOp::Replace, batch)).unwrap();
+            sink.apply(&ChangeBatch::new("commits", ChangeOp::Replace, batch))
+                .unwrap();
         }
 
         let sqls: Vec<&str> = out.iter().map(|s| s.sql.as_str()).collect();
@@ -278,7 +322,8 @@ mod tests {
         assert!(sqls[1].contains("CREATE TABLE IF NOT EXISTS \"mine\".\"commits\""));
         assert_eq!(sqls[2], "DELETE FROM \"mine\".\"commits\"");
         assert!(sqls[3].contains("INSERT INTO \"mine\".\"commits\""));
-        assert!(sqls[3].contains("ON CONFLICT (\"oid\") DO UPDATE SET \"message\" = excluded.\"message\""));
+        assert!(sqls[3]
+            .contains("ON CONFLICT (\"oid\") DO UPDATE SET \"message\" = excluded.\"message\""));
         // The oid param is hex text, not raw bytes.
         assert_eq!(out[3].params[0], Value::String("abcd".into()));
         assert_eq!(out[3].params[1], Value::String("hello".into()));
@@ -287,12 +332,20 @@ mod tests {
     #[test]
     fn integer_ids_pass_through_as_numbers() {
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)]));
-        let batch = RecordBatch::try_new(schema, vec![Arc::new(Int64Array::from(vec![7i64]))]).unwrap();
+        let batch =
+            RecordBatch::try_new(schema, vec![Arc::new(Int64Array::from(vec![7i64]))]).unwrap();
         let mut out = Vec::new();
         {
-            let mut sink =
-                DriverSink::new(|s| { out.push(s); Ok(()) }, Dialect::Postgres, SinkSelect::default());
-            sink.apply(&ChangeBatch::new("gh_users", ChangeOp::Upsert, batch)).unwrap();
+            let mut sink = DriverSink::new(
+                |s| {
+                    out.push(s);
+                    Ok(())
+                },
+                Dialect::Postgres,
+                SinkSelect::default(),
+            );
+            sink.apply(&ChangeBatch::new("gh_users", ChangeOp::Upsert, batch))
+                .unwrap();
         }
         let insert = out.iter().find(|s| s.sql.contains("INSERT")).unwrap();
         assert_eq!(insert.params[0], Value::from(7i64));

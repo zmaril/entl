@@ -29,7 +29,10 @@ pub fn materialize(world: &GitWorld, repo: &Path) -> Result<Vec<String>> {
     let refs: Vec<SnapRef> = world
         .refs
         .iter()
-        .map(|r| SnapRef { name: r.name.clone(), target: r.target })
+        .map(|r| SnapRef {
+            name: r.name.clone(),
+            target: r.target,
+        })
         .collect();
     import(repo, &commits, &refs)
 }

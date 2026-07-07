@@ -1,4 +1,4 @@
-# entl CI: the Rust engine + fluessig, all three bindings against their suites,
+# entl CI: the Rust engine, all three bindings against their suites,
 # the codegen-freshness gate (every generated artifact must match a fresh
 # regeneration — stale codegen is a build failure, not a surprise), the Postgres
 # leg of the testkit round-trips, and the executable-docs harness (every code
@@ -56,15 +56,19 @@ jobs:
               - '.github/actions/**'
 
   rust:
-    name: rust (core + cli + fluessig + testkit)
+    name: rust (core + cli + testkit)
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust-setup
-      # default members: entl-core, entl-cli, fluessig (incl. the drift guards
-      # over every committed generated artifact)
+      # lint gates first (fmt is instant; clippy warms the test build below)
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets -- -D warnings
+      # default members: entl-core, entl-cli. The schema tool (fluessig) lives in
+      # its own repo now; the codegen drift guard runs in the `node` job below
+      # (regenerate via the external tool, fail if any committed artifact changed).
       - run: cargo test
       # the round-trip property tests (P1 store, P2 OID-exact, P3 forge)
       - run: cargo test -p entl-testkit
@@ -90,11 +94,19 @@ jobs:
         working-directory: crates/entl-node
         run: bun test
       - name: codegen freshness — regenerate everything, fail on drift
+        env:
+          # The schema tool lives in its own repo; pin the ref entl generates
+          # against. Bump this when adopting a new fluessig release.
+          FLUESSIG_REF: main
         run: |
-          (cd crates/fluessig/emitter && npm install && node emit.mjs ../entl.tsp)
-          (cd crates/entl-node && bun run gen)
+          # Clone into RUNNER_TEMP (outside the workspace) so it can't register
+          # as drift in the git-clean check below.
+          git clone --depth 1 --branch "$FLUESSIG_REF" \
+            https://github.com/zmaril/fluessig "$RUNNER_TEMP/fluessig"
+          export FLUESSIG_DIR="$RUNNER_TEMP/fluessig"
+          (cd crates/entl-node && bun run gen)   # runs scripts/gen.sh against $FLUESSIG_DIR
           if [ -n "$(git status --porcelain)" ]; then
-            echo "::error::generated artifacts are stale — run the regen chain and commit (see crates/fluessig/plan.txt)"
+            echo "::error::generated artifacts are stale — run scripts/gen.sh and commit"
             git status --porcelain
             git diff | head -200
             exit 1

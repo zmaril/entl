@@ -12,7 +12,14 @@ use proptest::prelude::*;
 use crate::world::{GenBlob, GenCommit, GenRef, GenSig, GitWorld, Mode};
 
 const PATHS: &[&str] = &[
-    "a.txt", "b.txt", "c.md", "dir/x.txt", "dir/y.bin", "src/main.rs", "README", "d/e/f.txt",
+    "a.txt",
+    "b.txt",
+    "c.md",
+    "dir/x.txt",
+    "dir/y.bin",
+    "src/main.rs",
+    "README",
+    "d/e/f.txt",
 ];
 const PEOPLE: &[(&str, &str)] = &[
     ("Alice", "alice@example.com"),
@@ -136,7 +143,10 @@ fn build(raws: Vec<RawCommit>, extra_refs: Vec<(usize, usize)>) -> GitWorld {
         });
     }
 
-    let mut refs = vec![GenRef { name: "refs/heads/main".to_string(), target: n - 1 }];
+    let mut refs = vec![GenRef {
+        name: "refs/heads/main".to_string(),
+        target: n - 1,
+    }];
     for (k, (kind, tgt)) in extra_refs.into_iter().enumerate() {
         let target = tgt % n;
         let name = match kind {

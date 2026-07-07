@@ -68,7 +68,7 @@ pub async fn sync_events(
         for e in &events {
             // Feed is newest-first; stop once we reach already-stored events.
             if let Some(c) = e.created_at {
-                if new_wm.map_or(true, |m| c > m) {
+                if new_wm.is_none_or(|m| c > m) {
                     new_wm = Some(c);
                 }
                 if matches!(watermark, Some(w) if c <= w) {

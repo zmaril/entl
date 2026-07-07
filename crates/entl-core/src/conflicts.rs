@@ -60,7 +60,9 @@ pub fn analyze_conflicts(
     let mut buf: Vec<Row> = Vec::new();
 
     for &oid in &merges {
-        let Ok(commit) = repo.find_commit(oid) else { continue };
+        let Ok(commit) = repo.find_commit(oid) else {
+            continue;
+        };
         let parents: Vec<gix::ObjectId> = commit.parent_ids().map(|i| i.detach()).collect();
         if parents.len() != 2 {
             stats.octopus_skipped += 1; // octopus / root — handle pairwise later
@@ -102,7 +104,10 @@ fn conflicts_for_merge(
     p1: gix::ObjectId,
     p2: gix::ObjectId,
 ) -> Result<Vec<Row>, MergeSkip> {
-    let base = repo.merge_base(p1, p2).map_err(|_| MergeSkip::NoBase)?.detach();
+    let base = repo
+        .merge_base(p1, p2)
+        .map_err(|_| MergeSkip::NoBase)?
+        .detach();
 
     let tree_of = |oid: gix::ObjectId| -> Result<gix::ObjectId, MergeSkip> {
         Ok(repo
@@ -118,13 +123,7 @@ fn conflicts_for_merge(
 
     let options = repo.tree_merge_options().map_err(|_| MergeSkip::Other)?;
     let outcome = repo
-        .merge_trees(
-            base_tree,
-            our_tree,
-            their_tree,
-            Default::default(),
-            options,
-        )
+        .merge_trees(base_tree, our_tree, their_tree, Default::default(), options)
         .map_err(|_| MergeSkip::Other)?;
 
     // Dedup paths within a merge (rename conflicts can emit two entries);
@@ -152,7 +151,12 @@ fn flush(db: &Db, repo_id: &str, buf: &mut Vec<Row>) -> Result<()> {
     }
     let mut app = db.conn.appender("conflicts")?;
     for r in buf.iter() {
-        app.append_row(params![repo_id, r.merge_oid.as_bytes(), r.path, r.unresolved])?;
+        app.append_row(params![
+            repo_id,
+            r.merge_oid.as_bytes(),
+            r.path,
+            r.unresolved
+        ])?;
     }
     app.flush()?;
     buf.clear();

@@ -10,6 +10,7 @@ use serde::Deserialize;
 
 /// Sub-resource page caps. PRs exceeding these are truncated (totalCount lets us
 /// detect + report it); full sub-pagination is a later refinement.
+#[allow(dead_code)] // documents the cap baked into PR_QUERY; consumed once sub-pagination lands
 pub const PRS_PER_PAGE: usize = 25;
 
 pub const PR_QUERY: &str = r#"
@@ -197,7 +198,9 @@ pub struct ReviewRequestNode {
 
 #[derive(Deserialize)]
 pub struct CommentConn {
+    // mirrors the wire schema; used to detect + report truncation once sub-pagination lands
     #[serde(rename = "totalCount")]
+    #[allow(dead_code)]
     pub total_count: i64,
     pub nodes: Vec<CommentNode>,
 }

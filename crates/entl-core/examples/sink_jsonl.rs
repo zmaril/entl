@@ -9,7 +9,9 @@
 use entl_core::{build_sink, pull_into, Db, PullOpts, SinkSelect, SinkTarget};
 
 fn main() -> anyhow::Result<()> {
-    let repo = std::env::args().nth(1).expect("usage: sink_jsonl <repo> <outdir>");
+    let repo = std::env::args()
+        .nth(1)
+        .expect("usage: sink_jsonl <repo> <outdir>");
     let outdir = std::env::args()
         .nth(2)
         .unwrap_or_else(|| "/tmp/entl-jsonl".to_string());
@@ -23,7 +25,11 @@ fn main() -> anyhow::Result<()> {
     eprintln!(
         "streamed {} git commits + {} PRs into {} rows across {outdir}/*.jsonl",
         outcome.git.new_commits,
-        outcome.github.as_ref().map(|g| g.pull_requests).unwrap_or(0),
+        outcome
+            .github
+            .as_ref()
+            .map(|g| g.pull_requests)
+            .unwrap_or(0),
         outcome.rows,
     );
     Ok(())

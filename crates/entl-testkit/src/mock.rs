@@ -115,20 +115,33 @@ fn route(method: &Method, url: &str, body: &str, s: &Served) -> Value {
             let run = between(path, "/actions/runs/", "/jobs")
                 .and_then(|id| id.parse::<i64>().ok())
                 .and_then(|id| s.world.runs.iter().find(|r| r.id == id));
-            let jobs: Vec<Value> = run.map(|r| r.jobs.iter().map(|j| job_json(j, r, s)).collect()).unwrap_or_default();
+            let jobs: Vec<Value> = run
+                .map(|r| r.jobs.iter().map(|j| job_json(j, r, s)).collect())
+                .unwrap_or_default();
             json!({ "total_count": jobs.len(), "jobs": Value::Array(jobs) })
         }
         Method::Get if path.ends_with("/check-runs") => {
             let sha = between(path, "/commits/", "/check-runs").unwrap_or("");
-            let runs: Vec<Value> = s.world.checks.iter()
+            let runs: Vec<Value> = s
+                .world
+                .checks
+                .iter()
                 .filter(|c| oid(c.commit, s) == sha)
-                .map(|c| check_json(c, s)).collect();
+                .map(|c| check_json(c, s))
+                .collect();
             json!({ "total_count": runs.len(), "check_runs": runs })
         }
         Method::Get if path.ends_with("/statuses") => {
             let sha = between(path, "/commits/", "/statuses").unwrap_or("");
             // The statuses REST endpoint returns a bare array (octocrab Page).
-            Value::Array(s.world.statuses.iter().filter(|st| oid(st.commit, s) == sha).map(status_json).collect())
+            Value::Array(
+                s.world
+                    .statuses
+                    .iter()
+                    .filter(|st| oid(st.commit, s) == sha)
+                    .map(status_json)
+                    .collect(),
+            )
         }
         // pulls/issues REST are only used as etag gates (body ignored).
         _ => json!([]),
@@ -282,7 +295,9 @@ fn comment(c: &crate::forge::GhComment, s: &Served) -> Value {
 fn label(i: usize, s: &Served) -> Value {
     match s.world.labels.get(i) {
         Some(l) => json!({ "name": l.name, "color": l.color, "description": l.description }),
-        None => json!({ "name": format!("l{i}"), "color": Value::Null, "description": Value::Null }),
+        None => {
+            json!({ "name": format!("l{i}"), "color": Value::Null, "description": Value::Null })
+        }
     }
 }
 

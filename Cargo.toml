@@ -1,10 +1,12 @@
 [workspace]
 resolver = "2"
-members = ["crates/entl-core", "crates/entl-cli", "crates/entl-node", "crates/entl-python", "crates/entl-ruby", "crates/entl-testkit", "crates/fluessig"]
+members = ["crates/entl-core", "crates/entl-cli", "crates/entl-node", "crates/entl-python", "crates/entl-ruby", "crates/entl-testkit"]
 # entl-node (napi) and entl-python (PyO3) build via their own toolchains
 # (@napi-rs/cli / maturin), not plain `cargo build`, so keep them out of the
-# default set to keep CLI/core builds fast. fluessig is pure Rust → default.
-default-members = ["crates/entl-core", "crates/entl-cli", "crates/fluessig"]
+# default set to keep CLI/core builds fast. The schema tool (fluessig) now lives
+# in its own repo (github.com/zmaril/fluessig); entl invokes it at codegen time
+# via scripts/gen.sh (see the schema convention in AGENTS.md).
+default-members = ["crates/entl-core", "crates/entl-cli"]
 
 [workspace.package]
 version = "0.0.0"

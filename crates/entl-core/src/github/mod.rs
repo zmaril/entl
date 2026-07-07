@@ -122,7 +122,10 @@ fn write_watermark(db: &Db, resource: &str, wm: DateTime<Utc>) -> Result<()> {
          VALUES (?, ?, now()::TIMESTAMP)
          ON CONFLICT (resource) DO UPDATE SET
            watermark = excluded.watermark, last_synced_at = excluded.last_synced_at",
-        params![resource, Value::Timestamp(TimeUnit::Microsecond, wm.timestamp_micros())],
+        params![
+            resource,
+            Value::Timestamp(TimeUnit::Microsecond, wm.timestamp_micros())
+        ],
     )?;
     Ok(())
 }
@@ -187,9 +190,16 @@ async fn etag_gate(
 
 /// Remove all rows for one PR (incremental replace before re-insert).
 fn delete_pr_rows(db: &Db, repo_id: &str, n: i64) -> Result<()> {
-    db.conn
-        .execute("DELETE FROM gh_pull_requests WHERE repo_id = ? AND number = ?", params![repo_id, n])?;
-    for t in ["gh_pr_reviews", "gh_pr_commits", "gh_requested_reviewers", "gh_review_comments"] {
+    db.conn.execute(
+        "DELETE FROM gh_pull_requests WHERE repo_id = ? AND number = ?",
+        params![repo_id, n],
+    )?;
+    for t in [
+        "gh_pr_reviews",
+        "gh_pr_commits",
+        "gh_requested_reviewers",
+        "gh_review_comments",
+    ] {
         db.conn.execute(
             &format!("DELETE FROM {t} WHERE repo_id = ? AND pr_number = ?"),
             params![repo_id, n],
@@ -197,7 +207,9 @@ fn delete_pr_rows(db: &Db, repo_id: &str, n: i64) -> Result<()> {
     }
     for t in ["gh_comments", "gh_labeled"] {
         db.conn.execute(
-            &format!("DELETE FROM {t} WHERE repo_id = ? AND subject_type = 'pr' AND subject_number = ?"),
+            &format!(
+                "DELETE FROM {t} WHERE repo_id = ? AND subject_type = 'pr' AND subject_number = ?"
+            ),
             params![repo_id, n],
         )?;
     }
@@ -206,8 +218,10 @@ fn delete_pr_rows(db: &Db, repo_id: &str, n: i64) -> Result<()> {
 
 /// Remove all rows for one issue.
 fn delete_issue_rows(db: &Db, repo_id: &str, n: i64) -> Result<()> {
-    db.conn
-        .execute("DELETE FROM gh_issues WHERE repo_id = ? AND number = ?", params![repo_id, n])?;
+    db.conn.execute(
+        "DELETE FROM gh_issues WHERE repo_id = ? AND number = ?",
+        params![repo_id, n],
+    )?;
     for t in ["gh_comments", "gh_labeled"] {
         db.conn.execute(
             &format!("DELETE FROM {t} WHERE repo_id = ? AND subject_type = 'issue' AND subject_number = ?"),
@@ -273,7 +287,9 @@ fn resolve_token() -> Result<String> {
             }
         }
     }
-    Err(anyhow!("no GitHub token: run `gh auth login` or set GH_TOKEN"))
+    Err(anyhow!(
+        "no GitHub token: run `gh auth login` or set GH_TOKEN"
+    ))
 }
 
 /// Ingest GitHub data for the repo at `path` into `db`.
@@ -328,9 +344,33 @@ pub fn ingest_github_streamed(
     let stats = ingest_github(db, path)?;
 
     // Top-level resources.
-    emit_delta(db, sink, "gh_pull_requests", ChangeOp::Upsert, &repo_id, "updated_at", pr_wm)?;
-    emit_delta(db, sink, "gh_issues", ChangeOp::Upsert, &repo_id, "updated_at", is_wm)?;
-    emit_delta(db, sink, "gh_events", ChangeOp::Insert, &repo_id, "created_at", ev_wm)?;
+    emit_delta(
+        db,
+        sink,
+        "gh_pull_requests",
+        ChangeOp::Upsert,
+        &repo_id,
+        "updated_at",
+        pr_wm,
+    )?;
+    emit_delta(
+        db,
+        sink,
+        "gh_issues",
+        ChangeOp::Upsert,
+        &repo_id,
+        "updated_at",
+        is_wm,
+    )?;
+    emit_delta(
+        db,
+        sink,
+        "gh_events",
+        ChangeOp::Insert,
+        &repo_id,
+        "created_at",
+        ev_wm,
+    )?;
     emit_all(db, sink, "gh_workflow_runs", ChangeOp::Replace, &repo_id)?;
     emit_all(db, sink, "gh_check_runs", ChangeOp::Replace, &repo_id)?;
 
@@ -340,12 +380,41 @@ pub fn ingest_github_streamed(
     // delta doesn't yet emit the deletions.
     let changed_prs = changed_numbers(db, "gh_pull_requests", &repo_id, pr_wm)?;
     let changed_issues = changed_numbers(db, "gh_issues", &repo_id, is_wm)?;
-    for table in ["gh_pr_reviews", "gh_pr_commits", "gh_requested_reviewers", "gh_review_comments"] {
-        emit_keys(db, sink, table, "pr_number", ChangeOp::Upsert, &repo_id, &changed_prs)?;
+    for table in [
+        "gh_pr_reviews",
+        "gh_pr_commits",
+        "gh_requested_reviewers",
+        "gh_review_comments",
+    ] {
+        emit_keys(
+            db,
+            sink,
+            table,
+            "pr_number",
+            ChangeOp::Upsert,
+            &repo_id,
+            &changed_prs,
+        )?;
     }
     for table in ["gh_comments", "gh_labeled"] {
-        emit_subject(db, sink, table, ChangeOp::Upsert, &repo_id, "pr", &changed_prs)?;
-        emit_subject(db, sink, table, ChangeOp::Upsert, &repo_id, "issue", &changed_issues)?;
+        emit_subject(
+            db,
+            sink,
+            table,
+            ChangeOp::Upsert,
+            &repo_id,
+            "pr",
+            &changed_prs,
+        )?;
+        emit_subject(
+            db,
+            sink,
+            table,
+            ChangeOp::Upsert,
+            &repo_id,
+            "issue",
+            &changed_issues,
+        )?;
     }
     // Dim tables the above reference. `gh_users` is global (no repo_id); both are
     // sent whole (not yet delta-optimized) so a sink always has the referents.
@@ -421,7 +490,10 @@ fn changed_numbers(
             "SELECT number FROM {table} WHERE repo_id = ? AND updated_at > ?"
         ))?;
         stmt.query_map(
-            params![repo_id, Value::Timestamp(TimeUnit::Microsecond, w.timestamp_micros())],
+            params![
+                repo_id,
+                Value::Timestamp(TimeUnit::Microsecond, w.timestamp_micros())
+            ],
             |r| r.get::<_, i32>(0),
         )?
         .collect::<duckdb::Result<Vec<i32>>>()?
@@ -446,7 +518,9 @@ fn emit_keys(
     numbers: &[i32],
 ) -> Result<()> {
     for chunk in numbers.chunks(500) {
-        let ph = std::iter::repeat("?").take(chunk.len()).collect::<Vec<_>>().join(", ");
+        let ph = std::iter::repeat_n("?", chunk.len())
+            .collect::<Vec<_>>()
+            .join(", ");
         let sql = format!("SELECT * FROM {table} WHERE repo_id = ? AND {key_col} IN ({ph})");
         let mut stmt = db.conn.prepare(&sql)?;
         let mut p: Vec<&dyn duckdb::ToSql> = Vec::with_capacity(chunk.len() + 1);
@@ -471,7 +545,9 @@ fn emit_subject(
     numbers: &[i32],
 ) -> Result<()> {
     for chunk in numbers.chunks(500) {
-        let ph = std::iter::repeat("?").take(chunk.len()).collect::<Vec<_>>().join(", ");
+        let ph = std::iter::repeat_n("?", chunk.len())
+            .collect::<Vec<_>>()
+            .join(", ");
         let sql = format!(
             "SELECT * FROM {table} WHERE repo_id = ? AND subject_type = ? AND subject_number IN ({ph})"
         );
@@ -498,13 +574,18 @@ async fn sync_repo_meta(
     name: &str,
     repo_id: &str,
 ) {
-    let meta: serde_json::Value =
-        match client.get(format!("/repos/{owner}/{name}"), None::<&()>).await {
-            Ok(v) => v,
-            Err(_) => return,
-        };
+    let meta: serde_json::Value = match client
+        .get(format!("/repos/{owner}/{name}"), None::<&()>)
+        .await
+    {
+        Ok(v) => v,
+        Err(_) => return,
+    };
     let default_branch = meta.get("default_branch").and_then(|v| v.as_str());
-    let homepage = meta.get("homepage").and_then(|v| v.as_str()).filter(|s| !s.is_empty());
+    let homepage = meta
+        .get("homepage")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty());
     let _ = db.conn.execute(
         "UPDATE repos SET host = 'github.com', owner = ?, name = ?, \
          default_branch = ?, homepage_url = ? WHERE id = ?",
@@ -537,7 +618,11 @@ async fn ingest_async(
     // loadGithub before the first loadGit), so the enrich retries until it lands.
     let needs_meta: bool = db
         .conn
-        .query_row("SELECT owner IS NULL FROM repos WHERE id = ?", params![repo_id], |r| r.get(0))
+        .query_row(
+            "SELECT owner IS NULL FROM repos WHERE id = ?",
+            params![repo_id],
+            |r| r.get(0),
+        )
         .unwrap_or(true);
 
     // Top-level signal: poll the event feed (also stored as an activity log). A 304
@@ -568,7 +653,17 @@ async fn ingest_async(
     )
     .await;
     if pr_changed {
-        sync_pr_graph(db, &client, owner, name, repo_id, &mut users, &mut labels, &mut stats).await?;
+        sync_pr_graph(
+            db,
+            &client,
+            owner,
+            name,
+            repo_id,
+            &mut users,
+            &mut labels,
+            &mut stats,
+        )
+        .await?;
         if let Some(e) = pr_etag {
             write_etag(db, &pr_res, &e)?;
         }
@@ -584,7 +679,17 @@ async fn ingest_async(
     )
     .await;
     if is_changed {
-        sync_issues(db, &client, owner, name, repo_id, &mut users, &mut labels, &mut stats).await?;
+        sync_issues(
+            db,
+            &client,
+            owner,
+            name,
+            repo_id,
+            &mut users,
+            &mut labels,
+            &mut stats,
+        )
+        .await?;
         if let Some(e) = is_etag {
             write_etag(db, &is_res, &e)?;
         }
@@ -593,8 +698,12 @@ async fn ingest_async(
     }
 
     let run_res = format!("gh:runs:{repo_id}");
-    let (run_changed, run_etag) =
-        etag_gate(&client, &format!("{api}/actions/runs?per_page=1"), read_etag(db, &run_res)?.as_deref()).await;
+    let (run_changed, run_etag) = etag_gate(
+        &client,
+        &format!("{api}/actions/runs?per_page=1"),
+        read_etag(db, &run_res)?.as_deref(),
+    )
+    .await;
     if run_changed {
         actions::sync_actions(db, &client, owner, name, repo_id, &mut stats).await?;
         if let Some(e) = run_etag {
@@ -611,6 +720,7 @@ async fn ingest_async(
 }
 
 /// Paginate issues (GraphQL) and write each page.
+#[allow(clippy::too_many_arguments)] // the ingest state (db, client, repo coords, users/labels/stats) is all genuinely needed
 async fn sync_issues(
     db: &Db,
     client: &octocrab::Octocrab,
@@ -638,7 +748,7 @@ async fn sync_issues(
         let mut stop = false;
         for (i, is) in conn.nodes.iter().enumerate() {
             if let Some(u) = is.updated_at {
-                if new_wm.map_or(true, |m| u > m) {
+                if new_wm.is_none_or(|m| u > m) {
                     new_wm = Some(u);
                 }
                 if matches!(watermark, Some(w) if u <= w) {
@@ -648,7 +758,15 @@ async fn sync_issues(
                 }
             }
         }
-        write_issue_page(db, repo_id, &conn.nodes[..stop_idx], &mut seen, users, labels, stats)?;
+        write_issue_page(
+            db,
+            repo_id,
+            &conn.nodes[..stop_idx],
+            &mut seen,
+            users,
+            labels,
+            stats,
+        )?;
 
         if stop || !conn.page_info.has_next_page || conn.page_info.end_cursor.is_none() {
             break;
@@ -684,16 +802,38 @@ fn write_issue_page(
     for is in to_write {
         let author_id = record(users, &is.author);
         is_app.append_row(params![
-            repo_id, is.number, is.title, is.body, is.state, author_id,
-            ts(is.created_at), ts(is.updated_at), ts(is.closed_at),
+            repo_id,
+            is.number,
+            is.title,
+            is.body,
+            is.state,
+            author_id,
+            ts(is.created_at),
+            ts(is.updated_at),
+            ts(is.closed_at),
         ])?;
         stats.issues += 1;
-        write_labeled(&mut lb_app, labels, repo_id, "issue", is.number, &is.labels.nodes)?;
+        write_labeled(
+            &mut lb_app,
+            labels,
+            repo_id,
+            "issue",
+            is.number,
+            &is.labels.nodes,
+        )?;
         for c in &is.comments.nodes {
             let Some(cid) = c.database_id else { continue };
             let aid = record(users, &c.author);
             // generated column order: (id, subject_type, repo_id, subject_number, …)
-            cm_app.append_row(params![cid, "issue", repo_id, is.number, aid, c.body, ts(c.created_at)])?;
+            cm_app.append_row(params![
+                cid,
+                "issue",
+                repo_id,
+                is.number,
+                aid,
+                c.body,
+                ts(c.created_at)
+            ])?;
             stats.comments += 1;
         }
     }
@@ -716,6 +856,7 @@ fn write_labels(db: &Db, repo_id: &str, labels: &Labels) -> Result<()> {
 }
 
 /// Paginate the PR graph (GraphQL) and write each page as it arrives.
+#[allow(clippy::too_many_arguments)] // the ingest state (db, client, repo coords, users/labels/stats) is all genuinely needed
 async fn sync_pr_graph(
     db: &Db,
     client: &octocrab::Octocrab,
@@ -746,7 +887,7 @@ async fn sync_pr_graph(
         let mut stop = false;
         for (i, pr) in conn.nodes.iter().enumerate() {
             if let Some(u) = pr.updated_at {
-                if new_wm.map_or(true, |m| u > m) {
+                if new_wm.is_none_or(|m| u > m) {
                     new_wm = Some(u);
                 }
                 if matches!(watermark, Some(w) if u <= w) {
@@ -756,7 +897,15 @@ async fn sync_pr_graph(
                 }
             }
         }
-        write_pr_page(db, repo_id, &conn.nodes[..stop_idx], &mut seen, users, labels, stats)?;
+        write_pr_page(
+            db,
+            repo_id,
+            &conn.nodes[..stop_idx],
+            &mut seen,
+            users,
+            labels,
+            stats,
+        )?;
 
         if stop || !conn.page_info.has_next_page || conn.page_info.end_cursor.is_none() {
             break;
@@ -804,15 +953,37 @@ fn write_pr_page(
         let head_oid = pr.head_oid.as_deref().and_then(oid);
         let base_oid = pr.base_oid.as_deref().and_then(oid);
         pr_app.append_row(params![
-            repo_id, pr.number, pr.title, pr.body, pr.state, author_id,
-            ts(pr.created_at), ts(pr.updated_at), ts(pr.closed_at), ts(pr.merged_at),
+            repo_id,
+            pr.number,
+            pr.title,
+            pr.body,
+            pr.state,
+            author_id,
+            ts(pr.created_at),
+            ts(pr.updated_at),
+            ts(pr.closed_at),
+            ts(pr.merged_at),
             merge_oid.as_ref().map(|o| o.as_bytes()),
-            pr.head_ref, pr.base_ref, pr.additions, pr.deletions, pr.changed_files, pr.is_draft,
-            pr.mergeable, pr.checks(),
-            head_oid.as_ref().map(|o| o.as_bytes()), base_oid.as_ref().map(|o| o.as_bytes()),
+            pr.head_ref,
+            pr.base_ref,
+            pr.additions,
+            pr.deletions,
+            pr.changed_files,
+            pr.is_draft,
+            pr.mergeable,
+            pr.checks(),
+            head_oid.as_ref().map(|o| o.as_bytes()),
+            base_oid.as_ref().map(|o| o.as_bytes()),
         ])?;
         stats.pull_requests += 1;
-        write_labeled(&mut lb_app, labels, repo_id, "pr", pr.number, &pr.labels.nodes)?;
+        write_labeled(
+            &mut lb_app,
+            labels,
+            repo_id,
+            "pr",
+            pr.number,
+            &pr.labels.nodes,
+        )?;
 
         let mut seen_commits = HashSet::new();
         for c in &pr.commits.nodes {
@@ -830,7 +1001,13 @@ fn write_pr_page(
             let Some(rid) = r.database_id else { continue };
             let reviewer = record(users, &r.author);
             rv_app.append_row(params![
-                rid, repo_id, pr.number, reviewer, r.state, ts(r.submitted_at), r.body
+                rid,
+                repo_id,
+                pr.number,
+                reviewer,
+                r.state,
+                ts(r.submitted_at),
+                r.body
             ])?;
             stats.reviews += 1;
         }
@@ -852,7 +1029,15 @@ fn write_pr_page(
             let Some(cid) = c.database_id else { continue };
             let aid = record(users, &c.author);
             // generated column order: (id, subject_type, repo_id, subject_number, …)
-            cm_app.append_row(params![cid, "pr", repo_id, pr.number, aid, c.body, ts(c.created_at)])?;
+            cm_app.append_row(params![
+                cid,
+                "pr",
+                repo_id,
+                pr.number,
+                aid,
+                c.body,
+                ts(c.created_at)
+            ])?;
             stats.comments += 1;
         }
 
@@ -863,8 +1048,16 @@ fn write_pr_page(
                 let coid = rc.commit.as_ref().and_then(|o| oid(&o.oid));
                 let line = rc.line.or(rc.original_line);
                 rc_app.append_row(params![
-                    rcid, repo_id, pr.number, rc.path, line, thread.side.as_deref(),
-                    coid.as_ref().map(|o| o.as_bytes()), aid, rc.body, ts(rc.created_at),
+                    rcid,
+                    repo_id,
+                    pr.number,
+                    rc.path,
+                    line,
+                    thread.side.as_deref(),
+                    coid.as_ref().map(|o| o.as_bytes()),
+                    aid,
+                    rc.body,
+                    ts(rc.created_at),
                     rc.reply_to.as_ref().and_then(|r| r.database_id),
                 ])?;
                 stats.review_comments += 1;

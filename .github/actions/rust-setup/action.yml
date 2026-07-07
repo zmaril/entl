@@ -4,6 +4,8 @@ runs:
   using: composite
   steps:
     - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy, rustfmt
     # One shared cache key across every CI job (rather than rust-cache's default
     # per-job key). The bundled-DuckDB dependency compile (~3 min) is identical
     # in all jobs, so a single shared cache means they restore it warm instead of

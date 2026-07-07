@@ -16,8 +16,13 @@ use proptest::strategy::{Strategy, ValueTree};
 use proptest::test_runner::{Config, RngAlgorithm, TestRng, TestRunner};
 
 fn main() -> anyhow::Result<()> {
-    let outdir = std::env::args().nth(1).expect("usage: gen_corpus <outdir> [count]");
-    let count: u32 = std::env::args().nth(2).and_then(|s| s.parse().ok()).unwrap_or(8);
+    let outdir = std::env::args()
+        .nth(1)
+        .expect("usage: gen_corpus <outdir> [count]");
+    let count: u32 = std::env::args()
+        .nth(2)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(8);
     std::fs::create_dir_all(&outdir)?;
 
     let tables: Vec<&str> = GIT_TABLES.to_vec();
@@ -38,7 +43,10 @@ fn main() -> anyhow::Result<()> {
         db.migrate()?;
         ingest_git(&db, &repo, &AtomicU64::new(0))?;
         let snap = extract_duckdb(&db.conn, &tables)?;
-        std::fs::write(format!("{dir}/expected.json"), serde_json::to_string(&snap)?)?;
+        std::fs::write(
+            format!("{dir}/expected.json"),
+            serde_json::to_string(&snap)?,
+        )?;
     }
     eprintln!("wrote {count} worlds → {outdir}");
     Ok(())

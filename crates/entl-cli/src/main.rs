@@ -19,7 +19,11 @@ use indicatif::{ProgressBar, ProgressStyle};
 use notify::{RecursiveMode, Watcher};
 
 #[derive(Parser)]
-#[command(name = "entl", version, about = "pull git + forge activity into queryable data")]
+#[command(
+    name = "entl",
+    version,
+    about = "pull git + forge activity into queryable data"
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -157,14 +161,21 @@ fn main() -> Result<()> {
             d.migrate()?;
             println!("initialized {db} ({} tables)", d.table_count()?);
         }
-        Cmd::Load { path, db, git_only, github_only } => {
+        Cmd::Load {
+            path,
+            db,
+            git_only,
+            github_only,
+        } => {
             let d = Db::open(&db)?;
             d.migrate()?;
             if !github_only {
                 let pb = ProgressBar::new_spinner();
                 pb.set_style(
-                    ProgressStyle::with_template("{spinner:.green} {human_pos} commits  {per_sec}  {elapsed}")
-                        .unwrap(),
+                    ProgressStyle::with_template(
+                        "{spinner:.green} {human_pos} commits  {per_sec}  {elapsed}",
+                    )
+                    .unwrap(),
                 );
                 pb.enable_steady_tick(Duration::from_millis(120));
                 // Worker threads bump `counter`; a ticker mirrors it onto the bar.
@@ -186,7 +197,10 @@ fn main() -> Result<()> {
                 pb.finish_and_clear();
                 eprintln!(
                     "git: +{} commits, {} file changes, {} refs in {:.1}s",
-                    r.new_commits, r.file_changes, r.refs, t0.elapsed().as_secs_f64(),
+                    r.new_commits,
+                    r.file_changes,
+                    r.refs,
+                    t0.elapsed().as_secs_f64(),
                 );
             }
             if !git_only {
@@ -200,19 +214,50 @@ fn main() -> Result<()> {
                 );
             }
         }
-        Cmd::Watch { path, db, interval, stream } => {
+        Cmd::Watch {
+            path,
+            db,
+            interval,
+            stream,
+        } => {
             run_watch(&path, &db, interval, stream)?;
         }
-        Cmd::Sink { path, to, dest, db, tables, exclude, renames, schema, no_github, objects } => {
-            run_sink(&path, &to, &dest, &db, tables, exclude, renames, schema, no_github, objects)?;
+        Cmd::Sink {
+            path,
+            to,
+            dest,
+            db,
+            tables,
+            exclude,
+            renames,
+            schema,
+            no_github,
+            objects,
+        } => {
+            run_sink(
+                &path, &to, &dest, &db, tables, exclude, renames, schema, no_github, objects,
+            )?;
         }
-        Cmd::Rebuild { from, dest, out, schema } => {
+        Cmd::Rebuild {
+            from,
+            dest,
+            out,
+            schema,
+        } => {
             let oids = entl_core::rebuild_store(&from, &dest, schema.as_deref(), Path::new(&out))?;
             eprintln!("rebuilt {} commits → {out}", oids.len());
         }
-        Cmd::Extract { from, dest, tables, schema } => {
+        Cmd::Extract {
+            from,
+            dest,
+            tables,
+            schema,
+        } => {
             let tables: Vec<String> = if tables.is_empty() {
-                entl_core::extract::GIT_TABLES.iter().map(|s| s.to_string()).collect()
+                entl_core::extract::GIT_TABLES
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect()
             } else {
                 tables
             };
@@ -225,8 +270,10 @@ fn main() -> Result<()> {
                 d.migrate()?;
                 let pb = ProgressBar::new_spinner();
                 pb.set_style(
-                    ProgressStyle::with_template("{spinner:.green} {human_pos} merges replayed  {per_sec}  {elapsed}")
-                        .unwrap(),
+                    ProgressStyle::with_template(
+                        "{spinner:.green} {human_pos} merges replayed  {per_sec}  {elapsed}",
+                    )
+                    .unwrap(),
                 );
                 pb.enable_steady_tick(Duration::from_millis(120));
                 let t0 = std::time::Instant::now();
@@ -293,7 +340,11 @@ fn run_sink(
         })
         .collect::<Result<Vec<_>>>()?;
     let select = entl_core::SinkSelect {
-        tables: if tables.is_empty() { None } else { Some(tables) },
+        tables: if tables.is_empty() {
+            None
+        } else {
+            Some(tables)
+        },
         exclude,
         rename,
         schema,
@@ -303,7 +354,15 @@ fn run_sink(
     d.migrate()?;
     let sink = entl_core::build_sink(target, Some(dest), select)?;
     let t0 = Instant::now();
-    let o = entl_core::pull_into(&d, path, sink, entl_core::PullOpts { github: !no_github, objects })?;
+    let o = entl_core::pull_into(
+        &d,
+        path,
+        sink,
+        entl_core::PullOpts {
+            github: !no_github,
+            objects,
+        },
+    )?;
 
     eprintln!(
         "git: +{} commits, {} file changes, {} refs",
@@ -347,7 +406,10 @@ fn git_fetch(path: &str) {
         .output()
     {
         Ok(o) if !o.status.success() => {
-            eprintln!("git fetch failed: {}", String::from_utf8_lossy(&o.stderr).trim())
+            eprintln!(
+                "git fetch failed: {}",
+                String::from_utf8_lossy(&o.stderr).trim()
+            )
         }
         Err(e) => eprintln!("git fetch error: {e}"),
         _ => {}
@@ -355,8 +417,12 @@ fn git_fetch(path: &str) {
     // PR heads — best-effort (no-op on non-GitHub remotes / repos without PRs).
     let _ = std::process::Command::new("git")
         .args([
-            "-C", path, "fetch", "origin",
-            "+refs/pull/*/head:refs/remotes/origin/pull/*", "--quiet",
+            "-C",
+            path,
+            "fetch",
+            "origin",
+            "+refs/pull/*/head:refs/remotes/origin/pull/*",
+            "--quiet",
         ])
         .output();
 }
@@ -365,7 +431,10 @@ fn sync_git_once(d: &Db, path: &str, sink: Option<&entl_core::ChangeSink>) {
     let counter = Arc::new(AtomicU64::new(0));
     match entl_core::ingest_git_streamed(d, path, &counter, sink) {
         Ok(r) if r.new_commits > 0 => {
-            eprintln!("git: +{} commits, {} file changes", r.new_commits, r.file_changes)
+            eprintln!(
+                "git: +{} commits, {} file changes",
+                r.new_commits, r.file_changes
+            )
         }
         Ok(_) => {}
         Err(e) => eprintln!("git sync error: {e:#}"),
@@ -458,8 +527,7 @@ fn run_watch(path: &str, db: &str, interval: u64, stream: bool) -> Result<()> {
     });
 
     // Coalesce bursts: block for the first event, then drain for a short window.
-    loop {
-        let Ok(first) = rx.recv() else { break };
+    while let Ok(first) = rx.recv() {
         let (mut git, mut github) = (false, false);
         match first {
             Tick::Git => git = true,

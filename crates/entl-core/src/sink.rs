@@ -76,7 +76,13 @@ impl SinkSelect {
             return None;
         }
         let target = self.target(&batch.table);
-        let cols = batch.batch.schema().fields().iter().map(|f| f.name().clone()).collect();
+        let cols = batch
+            .batch
+            .schema()
+            .fields()
+            .iter()
+            .map(|f| f.name().clone())
+            .collect();
         Some((target, cols))
     }
 }
@@ -134,9 +140,11 @@ pub fn cell_json(col: &ArrayRef, i: usize) -> Value {
         DataType::Boolean => Value::Bool(d!(BooleanArray)),
         DataType::Binary => Value::String(hex(d!(BinaryArray))),
         DataType::LargeBinary => Value::String(hex(d!(LargeBinaryArray))),
-        DataType::Timestamp(TimeUnit::Microsecond, _) => DateTime::from_timestamp_micros(d!(TimestampMicrosecondArray))
-            .map(|dt| Value::String(dt.to_rfc3339()))
-            .unwrap_or(Value::Null),
+        DataType::Timestamp(TimeUnit::Microsecond, _) => {
+            DateTime::from_timestamp_micros(d!(TimestampMicrosecondArray))
+                .map(|dt| Value::String(dt.to_rfc3339()))
+                .unwrap_or(Value::Null)
+        }
         other => Value::String(format!("<unsupported arrow type {other:?}>")),
     }
 }
@@ -148,7 +156,10 @@ pub fn batch_to_json(batch: &ChangeBatch) -> Vec<Value> {
     (0..batch.batch.num_rows())
         .map(|i| {
             let mut obj = Map::new();
-            obj.insert("_op".to_string(), Value::String(batch.op.as_str().to_string()));
+            obj.insert(
+                "_op".to_string(),
+                Value::String(batch.op.as_str().to_string()),
+            );
             for (c, f) in cols.iter().zip(schema.fields()) {
                 obj.insert(f.name().clone(), cell_json(c, i));
             }
@@ -232,7 +243,10 @@ use crate::schema_gen::{TableSchema, PG_TABLES, SQLITE_TABLES};
 
 /// A dialect table's DDL at the (possibly renamed) target name.
 fn instantiate(tables: &[TableSchema], name: &str, target: &str) -> Option<String> {
-    tables.iter().find(|t| t.name == name).map(|t| t.ddl.replace("__table__", target))
+    tables
+        .iter()
+        .find(|t| t.name == name)
+        .map(|t| t.ddl.replace("__table__", target))
 }
 
 /// Placeholder style for [`upsert_sql`].
@@ -247,15 +261,28 @@ pub(crate) enum Ph {
 /// and the driver sink). `table_sql` arrives already quoted/qualified.
 /// `excluded` is lowercase: valid in SQLite and Postgres alike.
 pub(crate) fn upsert_sql(table_sql: &str, cols: &[String], pk: &[String], ph: Ph) -> String {
-    let quoted = cols.iter().map(|c| format!("\"{c}\"")).collect::<Vec<_>>().join(", ");
+    let quoted = cols
+        .iter()
+        .map(|c| format!("\"{c}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
     let placeholders = match ph {
-        Ph::Question => std::iter::repeat("?").take(cols.len()).collect::<Vec<_>>().join(", "),
-        Ph::Dollar => (1..=cols.len()).map(|i| format!("${i}")).collect::<Vec<_>>().join(", "),
+        Ph::Question => std::iter::repeat_n("?", cols.len())
+            .collect::<Vec<_>>()
+            .join(", "),
+        Ph::Dollar => (1..=cols.len())
+            .map(|i| format!("${i}"))
+            .collect::<Vec<_>>()
+            .join(", "),
     };
     if pk.is_empty() {
         return format!("INSERT INTO {table_sql} ({quoted}) VALUES ({placeholders})");
     }
-    let conflict = pk.iter().map(|c| format!("\"{c}\"")).collect::<Vec<_>>().join(", ");
+    let conflict = pk
+        .iter()
+        .map(|c| format!("\"{c}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
     let non_pk: Vec<&String> = cols.iter().filter(|c| !pk.contains(c)).collect();
     if non_pk.is_empty() {
         format!("INSERT INTO {table_sql} ({quoted}) VALUES ({placeholders}) ON CONFLICT ({conflict}) DO NOTHING")
@@ -305,7 +332,9 @@ impl SqliteSink {
 
     /// PK columns of a table (via pragma), or `None` if the table doesn't exist.
     fn pk_of(&self, table: &str) -> Result<Option<Vec<String>>> {
-        let mut stmt = self.conn.prepare(&format!("PRAGMA table_info(\"{table}\")"))?;
+        let mut stmt = self
+            .conn
+            .prepare(&format!("PRAGMA table_info(\"{table}\")"))?;
         let mut rows: Vec<(i64, String)> = stmt
             .query_map([], |r| Ok((r.get::<_, i64>(5)?, r.get::<_, String>(1)?)))?
             .collect::<rusqlite::Result<_>>()?;
@@ -329,9 +358,14 @@ impl SqliteSink {
                 self.conn.execute_batch(&ddl)?;
             } else {
                 // No template for this table — typeless create (SQLite is dynamically typed), no PK.
-                let quoted = cols.iter().map(|c| format!("\"{c}\"")).collect::<Vec<_>>().join(", ");
-                self.conn
-                    .execute_batch(&format!("CREATE TABLE IF NOT EXISTS \"{target}\" ({quoted})"))?;
+                let quoted = cols
+                    .iter()
+                    .map(|c| format!("\"{c}\""))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                self.conn.execute_batch(&format!(
+                    "CREATE TABLE IF NOT EXISTS \"{target}\" ({quoted})"
+                ))?;
             }
         }
         let pk = self.pk_of(target)?.unwrap_or_default();
@@ -348,7 +382,8 @@ impl Sink for SqliteSink {
         let pk = self.ensure(&batch.table, &target, &cols)?;
 
         if batch.op == ChangeOp::Replace && self.cleared.insert(target.clone()) {
-            self.conn.execute(&format!("DELETE FROM \"{target}\""), [])?;
+            self.conn
+                .execute(&format!("DELETE FROM \"{target}\""), [])?;
         }
 
         let sql = insert_sql(&target, &cols, &pk);
@@ -445,7 +480,8 @@ impl PostgresSink {
             .build()
             .context("build TLS connector")?;
         let tls = postgres_native_tls::MakeTlsConnector::new(tls);
-        let mut client = Client::connect(url, tls).with_context(|| format!("connect postgres {url}"))?;
+        let mut client =
+            Client::connect(url, tls).with_context(|| format!("connect postgres {url}"))?;
         // All unqualified DDL/DML lands in the target schema.
         client.batch_execute(&format!(
             "CREATE SCHEMA IF NOT EXISTS \"{schema}\"; SET search_path TO \"{schema}\";"
@@ -484,7 +520,12 @@ impl PostgresSink {
     /// Ensure the `target` table exists (instantiating the `canonical` table's template at the
     /// target name, in the current schema) and return its PK columns. A table with no template is
     /// created from the batch's Arrow schema (no PK).
-    fn ensure(&mut self, canonical: &str, target: &str, batch: &ChangeBatch) -> Result<Vec<String>> {
+    fn ensure(
+        &mut self,
+        canonical: &str,
+        target: &str,
+        batch: &ChangeBatch,
+    ) -> Result<Vec<String>> {
         if let Some(pk) = self.pk.get(target) {
             return Ok(pk.clone());
         }
@@ -501,8 +542,9 @@ impl PostgresSink {
                     .map(|f| format!("\"{}\" {}", f.name(), pg_type(f.data_type())))
                     .collect::<Vec<_>>()
                     .join(", ");
-                self.client
-                    .batch_execute(&format!("CREATE TABLE IF NOT EXISTS \"{target}\" ({cols_ddl})"))?;
+                self.client.batch_execute(&format!(
+                    "CREATE TABLE IF NOT EXISTS \"{target}\" ({cols_ddl})"
+                ))?;
             }
         }
         let pk = self.pk_of(target)?.unwrap_or_default();
@@ -519,7 +561,8 @@ impl Sink for PostgresSink {
         let pk = self.ensure(&batch.table, &target, batch)?;
 
         if batch.op == ChangeOp::Replace && self.cleared.insert(target.clone()) {
-            self.client.execute(&format!("DELETE FROM \"{target}\""), &[])?;
+            self.client
+                .execute(&format!("DELETE FROM \"{target}\""), &[])?;
         }
 
         let sql = pg_insert_sql(&target, &cols, &pk);

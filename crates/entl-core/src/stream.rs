@@ -202,7 +202,10 @@ mod tests {
     fn poll_reports_closed_once_the_sink_is_dropped() {
         let (sink, stream) = change_channel(4);
         drop(sink);
-        assert!(matches!(stream.poll(Duration::from_millis(10)), Poll::Closed));
+        assert!(matches!(
+            stream.poll(Duration::from_millis(10)),
+            Poll::Closed
+        ));
     }
 
     #[test]
@@ -221,7 +224,11 @@ mod tests {
         let (sink, stream) = change_channel(2);
         let h = std::thread::spawn(move || {
             for _ in 0..5 {
-                if !sink.emit(ChangeBatch::new("file_changes", ChangeOp::Insert, tiny_batch(1))) {
+                if !sink.emit(ChangeBatch::new(
+                    "file_changes",
+                    ChangeOp::Insert,
+                    tiny_batch(1),
+                )) {
                     break;
                 }
             }

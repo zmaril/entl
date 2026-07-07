@@ -7,9 +7,9 @@ pub mod conflicts;
 pub mod db;
 pub mod diff;
 pub mod driver;
+pub mod extract;
 pub mod github;
 pub mod gitops;
-pub mod extract;
 pub mod gitwrite;
 pub mod ingest;
 pub mod objects;
@@ -26,20 +26,20 @@ pub use driver::{
     backfill, driver_tables, statement_channel, Dialect, DriverSink, Statement, StatementStream,
     StmtPoll,
 };
-pub use gitops::{branch_exists, commit_bodies, current_branch, ls_remote_heads};
-pub use github::{ingest_github, ingest_github_streamed, GithubIngest};
-pub use ingest::{ingest_git, ingest_git_streamed, GitIngest};
-pub use objects::{ingest_git_objects, ObjIngest};
+/// The Arrow batch type the change stream carries — re-exported so the generated
+/// bindings can name it (`entl_core::RecordBatch`) without their own arrow dep.
+pub use duckdb::arrow::record_batch::RecordBatch;
 pub use extract::{
     extract_duckdb, extract_json, extract_jsonl, extract_postgres, extract_sqlite, Snapshot,
 };
+pub use github::{ingest_github, ingest_github_streamed, GithubIngest};
+pub use gitops::{branch_exists, commit_bodies, current_branch, ls_remote_heads};
 pub use gitwrite::{fast_import_stream, git, import, SnapCommit, SnapRef};
+pub use ingest::{ingest_git, ingest_git_streamed, GitIngest};
+pub use objects::{ingest_git_objects, ObjIngest};
 pub use pull::{build_sink, pull_into, PullOpts, SinkOutcome, SinkTarget};
 pub use rebuild::{rebuild_from_snapshot, rebuild_from_store, rebuild_store};
 pub use sink::{drain, JsonlSink, PostgresSink, Sink, SinkSelect, SqliteSink};
 pub use stream::{
-    batch_ipc, batch_to_ffi, change_channel, ChangeBatch, ChangeOp, ChangeStream, ChangeSink, Poll,
+    batch_ipc, batch_to_ffi, change_channel, ChangeBatch, ChangeOp, ChangeSink, ChangeStream, Poll,
 };
-/// The Arrow batch type the change stream carries — re-exported so the generated
-/// bindings can name it (`entl_core::RecordBatch`) without their own arrow dep.
-pub use duckdb::arrow::record_batch::RecordBatch;
