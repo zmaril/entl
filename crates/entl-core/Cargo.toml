@@ -9,7 +9,7 @@ description = "Core engine: git + GitHub data into DuckDB."
 # Must stay in version-lockstep with the arrow the duckdb crate depends on, so cargo
 # unifies them into ONE arrow and RecordBatch stays a single type across both. On a
 # duckdb bump, bump this to duckdb's arrow major (check its Cargo.toml / Cargo.lock).
-arrow = { version = "58", default-features = false, features = ["ipc", "ffi"] }
+arrow = { version = "59", default-features = false, features = ["ipc", "ffi"] }
 anyhow = "1.0.103"
 chrono = "0.4.45"
 crossbeam-channel = "0.5.15"
