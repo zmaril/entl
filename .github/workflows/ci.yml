@@ -30,6 +30,7 @@ jobs:
   changes:
     name: detect changed paths
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     outputs:
       code: ${{ steps.filter.outputs.code }}
       docs: ${{ steps.filter.outputs.docs }}
@@ -60,6 +61,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust-setup
@@ -78,6 +80,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust-setup
@@ -95,14 +98,19 @@ jobs:
         run: bun test
       - name: codegen freshness — regenerate everything, fail on drift
         env:
-          # The schema tool lives in its own repo; pin the ref entl generates
-          # against. Bump this when adopting a new fluessig release.
-          FLUESSIG_REF: main
+          # The schema tool lives in its own repo; pin the SHA entl generates
+          # against (a branch pin makes this job hostage to tool merges — a
+          # fluessig change landed on main breaks freshness here until we bump).
+          # Bump deliberately when adopting a new fluessig.
+          FLUESSIG_REF: fc8956b9d3c0fad3803ee078056d75e249f1b1e0  # tagged unions + MCP + observe
         run: |
           # Clone into RUNNER_TEMP (outside the workspace) so it can't register
-          # as drift in the git-clean check below.
-          git clone --depth 1 --branch "$FLUESSIG_REF" \
-            https://github.com/zmaril/fluessig "$RUNNER_TEMP/fluessig"
+          # as drift in the git-clean check below. Fetch the pinned SHA directly
+          # (clone --branch takes refs, not SHAs).
+          git init -q "$RUNNER_TEMP/fluessig"
+          git -C "$RUNNER_TEMP/fluessig" fetch -q --depth 1 \
+            https://github.com/zmaril/fluessig "$FLUESSIG_REF"
+          git -C "$RUNNER_TEMP/fluessig" checkout -q FETCH_HEAD
           export FLUESSIG_DIR="$RUNNER_TEMP/fluessig"
           (cd crates/entl-node && bun run gen)   # runs scripts/gen.sh against $FLUESSIG_DIR
           if [ -n "$(git status --porcelain)" ]; then
@@ -117,6 +125,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust-setup
@@ -138,6 +147,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust-setup
@@ -168,6 +178,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     services:
       postgres:
         image: postgres:16
@@ -195,6 +206,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust-setup
