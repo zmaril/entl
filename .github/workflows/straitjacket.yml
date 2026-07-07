@@ -13,6 +13,7 @@ permissions:
 jobs:
   straitjacket:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       # Pinned, not @main/latest: a new straitjacket rule reaches this repo only
