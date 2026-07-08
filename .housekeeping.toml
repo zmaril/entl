@@ -3,13 +3,11 @@ logo = "site/public/duckling-mark.png"  # fleet dashboard logo
 fleet = "zmaril/powderworks"
 
 [checks]
-# Fleet policy (zmaril/powderworks) requires conventional commits fleet-wide,
-# so the previous local "off" override is gone. This check still needs a
-# PR-title lint in CI and a README/CONTRIBUTING mention to pass —
-# `housekeeper fix conventional-commits` scaffolds both.
+# Fleet policy (zmaril/powderworks) requires conventional commits fleet-wide.
+# Enforced via .github/workflows/conventional.yml (PR-title lint) plus a
+# README mention, matching the fleet-canonical form.
 conventional-commits = "required"
 
 # stray-files.allow is locked by the fleet, so it can't be set per-repo now.
-# The canonical worklist file is unaffected; translation.md now surfaces as a
-# recommended-severity stray until it moves under notes/ (or gets a fleet-side
-# exception).
+# Working docs live under notes/ (translation.md moved there); the canonical
+# worklist file stays at the root.

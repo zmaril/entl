@@ -44,7 +44,7 @@ Entl is my answer. Pull the history and forge activity down once, keep it curren
 
 Entl is early and moving fast. If something's broken, missing, or you've got a git/forge question you wish you could just query — [**file an issue**](https://github.com/zmaril/entl/issues), [**join the Discord**](https://discord.gg/5G6KvdJffj), or follow [**@ZackMaril** on X](https://x.com/ZackMaril).
 
-To hack on entl locally, run `scripts/dev.sh` to build the Rust core and CLI; the language bindings and postgres sink have their own setup.
+To hack on entl locally, run `scripts/dev.sh` to build the Rust core and CLI; the language bindings and postgres sink have their own setup. PR titles follow [Conventional Commits](https://www.conventionalcommits.org) (`type(scope): summary`), enforced in CI.
 
 ## License
 
