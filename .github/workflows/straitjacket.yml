@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Pinned, not @main/latest: a new straitjacket rule reaches this repo only
       # on a deliberate bump, not the moment it ships.
       - uses: zmaril/straitjacket@v0.2.3
