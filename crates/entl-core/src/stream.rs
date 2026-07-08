@@ -13,7 +13,8 @@
 use std::time::Duration;
 
 use crossbeam_channel::{bounded, Receiver, RecvTimeoutError, Sender, TryRecvError};
-use duckdb::arrow::record_batch::RecordBatch;
+// entl's OWN arrow — the change stream is entirely in entl's arrow version (see lib.rs / Cargo.toml).
+use arrow::record_batch::RecordBatch;
 
 /// What happened to the rows in a batch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,7 +72,7 @@ impl ChangeBatch {
 
     /// Pretty-print the rows as a text table (debugging / verification).
     pub fn pretty(&self) -> String {
-        duckdb::arrow::util::pretty::pretty_format_batches(std::slice::from_ref(&self.batch))
+        arrow::util::pretty::pretty_format_batches(std::slice::from_ref(&self.batch))
             .map(|d| d.to_string())
             .unwrap_or_default()
     }
@@ -168,8 +169,8 @@ pub fn batch_to_ffi(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use duckdb::arrow::array::Int32Array;
-    use duckdb::arrow::datatypes::{DataType, Field, Schema};
+    use arrow::array::Int32Array;
+    use arrow::datatypes::{DataType, Field, Schema};
     use std::sync::Arc;
 
     fn tiny_batch(n: i32) -> RecordBatch {

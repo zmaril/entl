@@ -6,10 +6,19 @@ license.workspace = true
 description = "Core engine: git + GitHub data into DuckDB."
 
 [dependencies]
-# Must stay in version-lockstep with the arrow the duckdb crate depends on, so cargo
-# unifies them into ONE arrow and RecordBatch stays a single type across both. On a
-# duckdb bump, bump this to duckdb's arrow major (check its Cargo.toml / Cargo.lock).
-arrow = { version = "58", default-features = false, features = ["ipc", "ffi"] }
+# entl's OWN arrow — the version the public change-stream type (`entl_core::RecordBatch`,
+# `ChangeBatch.batch`) and every in-memory builder speak. It floats INDEPENDENTLY of the arrow
+# the duckdb crate bundles (see notes/design/arrow-ipc.md): duckdb-owned batches are converted to
+# this arrow at the ~handful of read sites via an Arrow-IPC bridge (crate::arrow_bridge), so the
+# two majors can differ. `prettyprint` backs ChangeBatch::pretty on this (entl-side) batch.
+arrow = { version = "59", default-features = false, features = ["ipc", "ffi", "prettyprint"] }
+# The bridge's read-side codec: the SAME arrow the duckdb crate bundles (major-pinned to duckdb),
+# renamed so it can coexist with the newer `arrow` above. We ask for `ipc` here so cargo's
+# feature-unification gives duckdb's shared arrow instance an IPC writer (duckdb itself requests
+# only prettyprint+ffi); the bridge serializes duckdb batches with it, entl reads them back with
+# `arrow`. On a duckdb bump, bump THIS major to duckdb's arrow — a bridge-local change, not a
+# whole-crate lockstep bump of the public type.
+arrow58 = { package = "arrow", version = "58", default-features = false, features = ["ipc"] }
 anyhow = "1.0.103"
 chrono = "0.4.45"
 crossbeam-channel = "0.5.15"

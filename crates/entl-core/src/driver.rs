@@ -249,9 +249,9 @@ pub fn backfill(conn: &duckdb::Connection, sink: &mut dyn Sink, tables: &[&str])
             continue;
         }
         let mut stmt = conn.prepare(&format!("SELECT * FROM \"{t}\""))?;
-        let batches: Vec<duckdb::arrow::record_batch::RecordBatch> =
-            stmt.query_arrow([])?.collect();
-        for b in batches {
+        let duck: Vec<duckdb::arrow::record_batch::RecordBatch> = stmt.query_arrow([])?.collect();
+        // DuckDB hands back its own arrow; bridge to entl's arrow for the change stream.
+        for b in crate::arrow_bridge::duckdb_batches_to_entl(duck)? {
             total += sink.apply(&ChangeBatch::new(t, ChangeOp::Replace, b))?;
         }
     }
@@ -268,9 +268,9 @@ pub fn driver_tables() -> Vec<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use duckdb::arrow::array::{BinaryArray, Int64Array, StringArray};
-    use duckdb::arrow::datatypes::{DataType, Field, Schema};
-    use duckdb::arrow::record_batch::RecordBatch;
+    use arrow::array::{BinaryArray, Int64Array, StringArray};
+    use arrow::datatypes::{DataType, Field, Schema};
+    use arrow::record_batch::RecordBatch;
     use std::sync::Arc;
 
     #[test]

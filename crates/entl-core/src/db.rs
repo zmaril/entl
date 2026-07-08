@@ -101,7 +101,9 @@ impl Db {
             stmt.query_arrow([])?.collect();
         let schema = stmt.schema();
         let mut buf = Vec::new();
-        let mut w = arrow::ipc::writer::StreamWriter::try_new(&mut buf, schema.as_ref())?;
+        // The batches are duckdb's arrow (v58); serialize with the matching-version IPC writer.
+        // Any arrow reader (entl's v59 included — the test below) decodes it; IPC is cross-version.
+        let mut w = arrow58::ipc::writer::StreamWriter::try_new(&mut buf, schema.as_ref())?;
         for b in &batches {
             w.write(b)?;
         }

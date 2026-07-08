@@ -21,11 +21,12 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use duckdb::arrow::array::{
+// cell_json / batch_to_json read a `ChangeBatch.batch`, which is entl's OWN arrow.
+use arrow::array::{
     Array, ArrayRef, BinaryArray, BooleanArray, Float64Array, Int32Array, Int64Array,
     LargeBinaryArray, LargeStringArray, StringArray, TimestampMicrosecondArray,
 };
-use duckdb::arrow::datatypes::{DataType, TimeUnit};
+use arrow::datatypes::{DataType, TimeUnit};
 use postgres::types::{ToSql, Type};
 use postgres::Client;
 use serde_json::{Map, Value};
