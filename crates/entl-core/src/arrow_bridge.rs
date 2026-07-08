@@ -15,6 +15,23 @@
 
 use anyhow::Result;
 
+/// Serialize DuckDB-produced Arrow batches (duckdb's arrow, v58) to an Arrow IPC stream (`schema` +
+/// the batches). `arrow58` is the same crate instance duckdb links, with `ipc` unioned in, so its
+/// StreamWriter accepts these batches. Shared by the bridge below and `Db::query_arrow_ipc` (the
+/// one place we serialize duckdb batches straight to bytes).
+pub fn duck_batches_to_ipc(
+    schema: &duckdb::arrow::datatypes::Schema,
+    batches: &[duckdb::arrow::record_batch::RecordBatch],
+) -> Result<Vec<u8>> {
+    let mut buf = Vec::new();
+    let mut w = arrow58::ipc::writer::StreamWriter::try_new(&mut buf, schema)?;
+    for b in batches {
+        w.write(b)?;
+    }
+    w.finish()?;
+    Ok(buf)
+}
+
 /// Convert DuckDB-produced Arrow batches (duckdb's arrow, `arrow58`) into entl's Arrow batches
 /// (`arrow`), via an Arrow IPC round-trip. Empty input yields an empty vec (nothing to serialize).
 pub fn duckdb_batches_to_entl(
@@ -23,19 +40,10 @@ pub fn duckdb_batches_to_entl(
     if batches.is_empty() {
         return Ok(Vec::new());
     }
-    // Serialize with duckdb's arrow (v58) — the batches are its type. `arrow58` is the same crate
-    // instance duckdb links, with `ipc` unioned in, so its StreamWriter accepts these batches.
-    let mut buf = Vec::new();
-    {
-        let schema = batches[0].schema();
-        let mut w = arrow58::ipc::writer::StreamWriter::try_new(&mut buf, schema.as_ref())?;
-        for b in &batches {
-            w.write(b)?;
-        }
-        w.finish()?;
-    }
-    // Read back with entl's arrow (v59). The IPC stream carries the schema, so this is self-contained.
-    let reader = arrow::ipc::reader::StreamReader::try_new(std::io::Cursor::new(buf), None)?;
+    // Serialize with duckdb's arrow (v58), then read back with entl's arrow (v59). The IPC stream
+    // carries the schema, so the round-trip is self-contained and version-independent.
+    let ipc = duck_batches_to_ipc(batches[0].schema().as_ref(), &batches)?;
+    let reader = arrow::ipc::reader::StreamReader::try_new(std::io::Cursor::new(ipc), None)?;
     Ok(reader.collect::<std::result::Result<Vec<_>, _>>()?)
 }
 
