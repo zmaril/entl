@@ -144,10 +144,15 @@ maturin develop`), and the CLI (`cargo build --release`). The docs generator rea
   whose source is missing and keeps the committed copy.
 - The docs reference generator escapes MDX-special chars in ported prose (`{`/`}`/`|`); see
   notes/design/docs.md if a schema comment breaks the build.
-- entl-core's direct `arrow` dependency must stay in **version-lockstep with the arrow that
-  the duckdb crate depends on** (cargo then unifies them into one crate, keeping `RecordBatch`
-  a single type). On a duckdb bump, bump `arrow` to duckdb's arrow major — two arrows in
-  Cargo.lock means the Arrow handoff stops compiling.
+- entl-core's **public** `arrow` (the `RecordBatch` in `ChangeBatch` / `entl_core::RecordBatch`)
+  is the direct `arrow` crate and **floats independently** of the arrow the `duckdb` crate ships —
+  two arrow majors in `Cargo.lock` is **expected**, not a breakage. DuckDB-produced batches get
+  converted to entl's arrow at the bounded `query_arrow()` read sites via an Arrow-IPC round-trip in
+  `crates/entl-core/src/arrow_bridge.rs` (no `unsafe`); the write path is row-based, so nothing
+  crosses into duckdb. On a duckdb **major** bump, the one thing to bump is the bridge-local,
+  package-renamed `arrow58` dep in `Cargo.toml` — it exists only to give the read-side IPC *writer*
+  the `ipc` feature on duckdb's arrow, and should track duckdb's arrow major (NOT a whole-crate
+  lockstep bump). See [notes/design/arrow-ipc.md](./notes/design/arrow-ipc.md) for the rationale.
 
 ## Working agreement
 
