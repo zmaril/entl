@@ -1,13 +1,15 @@
 logo = "site/public/duckling-mark.png"  # fleet dashboard logo
 # housekeeper overrides — see github.com/zmaril/housekeeping
+fleet = "zmaril/powderworks"
 
 [checks]
-# Commit style here is prose summaries, not conventional commits; PRs land as
-# merge commits so a PR-title lint wouldn't reach main's history anyway.
-# Revisit if the repo moves to squash merges.
-conventional-commits = "off"
+# Fleet policy (zmaril/powderworks) requires conventional commits fleet-wide,
+# so the previous local "off" override is gone. This check still needs a
+# PR-title lint in CI and a README/CONTRIBUTING mention to pass —
+# `housekeeper fix conventional-commits` scaffolds both.
+conventional-commits = "required"
 
-[stray-files]
-# Deliberate working docs, not strays: todo.txt is the active worklist,
-# translation.md is the bindings-abstraction analysis that fluessig grew from.
-allow = ["todo.txt", "translation.md"]
+# stray-files.allow is locked by the fleet, so it can't be set per-repo now.
+# The canonical worklist file is unaffected; translation.md now surfaces as a
+# recommended-severity stray until it moves under notes/ (or gets a fleet-side
+# exception).
