@@ -19,7 +19,8 @@ use duckdb::types::{TimeUnit, Value};
 use crate::db::Db;
 use crate::ingest::compute_repo_id;
 use crate::stream::{ChangeBatch, ChangeOp, ChangeSink};
-use duckdb::arrow::record_batch::RecordBatch;
+// DuckDB hands back batches in ITS arrow; we bridge them to entl's arrow before emitting.
+use duckdb::arrow::record_batch::RecordBatch as DuckBatch;
 
 mod actions;
 mod checks;
@@ -424,13 +425,20 @@ pub fn ingest_github_streamed(
     Ok(stats)
 }
 
-/// Send each non-empty batch; stop early if the consumer has hung up.
-fn emit_batches(sink: &ChangeSink, table: &str, op: ChangeOp, batches: Vec<RecordBatch>) {
-    for b in batches {
+/// Bridge DuckDB's arrow batches to entl's arrow, then send each non-empty one; stop early if the
+/// consumer has hung up.
+fn emit_batches(
+    sink: &ChangeSink,
+    table: &str,
+    op: ChangeOp,
+    batches: Vec<DuckBatch>,
+) -> Result<()> {
+    for b in crate::arrow_bridge::duckdb_batches_to_entl(batches)? {
         if b.num_rows() > 0 && !sink.emit(ChangeBatch::new(table, op, b)) {
             break;
         }
     }
+    Ok(())
 }
 
 /// Emit rows whose `col` advanced past the pre-sync watermark (all rows if none).
@@ -443,7 +451,7 @@ fn emit_delta(
     col: &str,
     wm: Option<DateTime<Utc>>,
 ) -> Result<()> {
-    let batches: Vec<RecordBatch> = if let Some(w) = wm {
+    let batches: Vec<DuckBatch> = if let Some(w) = wm {
         let sql = format!("SELECT * FROM {table} WHERE repo_id = ? AND {col} > ?");
         let mut stmt = db.conn.prepare(&sql)?;
         stmt.query_arrow(params![
@@ -456,7 +464,7 @@ fn emit_delta(
         let mut stmt = db.conn.prepare(&sql)?;
         stmt.query_arrow(params![repo_id])?.collect()
     };
-    emit_batches(sink, table, op, batches);
+    emit_batches(sink, table, op, batches)?;
     Ok(())
 }
 
@@ -464,16 +472,16 @@ fn emit_delta(
 fn emit_all(db: &Db, sink: &ChangeSink, table: &str, op: ChangeOp, repo_id: &str) -> Result<()> {
     let sql = format!("SELECT * FROM {table} WHERE repo_id = ?");
     let mut stmt = db.conn.prepare(&sql)?;
-    let batches: Vec<RecordBatch> = stmt.query_arrow(params![repo_id])?.collect();
-    emit_batches(sink, table, op, batches);
+    let batches: Vec<DuckBatch> = stmt.query_arrow(params![repo_id])?.collect();
+    emit_batches(sink, table, op, batches)?;
     Ok(())
 }
 
 /// Emit a whole table that has no `repo_id` (global dim tables like `gh_users`).
 fn emit_all_global(db: &Db, sink: &ChangeSink, table: &str, op: ChangeOp) -> Result<()> {
     let mut stmt = db.conn.prepare(&format!("SELECT * FROM {table}"))?;
-    let batches: Vec<RecordBatch> = stmt.query_arrow([])?.collect();
-    emit_batches(sink, table, op, batches);
+    let batches: Vec<DuckBatch> = stmt.query_arrow([])?.collect();
+    emit_batches(sink, table, op, batches)?;
     Ok(())
 }
 
@@ -528,8 +536,8 @@ fn emit_keys(
         for n in chunk {
             p.push(n);
         }
-        let batches: Vec<RecordBatch> = stmt.query_arrow(p.as_slice())?.collect();
-        emit_batches(sink, table, op, batches);
+        let batches: Vec<DuckBatch> = stmt.query_arrow(p.as_slice())?.collect();
+        emit_batches(sink, table, op, batches)?;
     }
     Ok(())
 }
@@ -558,8 +566,8 @@ fn emit_subject(
         for n in chunk {
             p.push(n);
         }
-        let batches: Vec<RecordBatch> = stmt.query_arrow(p.as_slice())?.collect();
-        emit_batches(sink, table, op, batches);
+        let batches: Vec<DuckBatch> = stmt.query_arrow(p.as_slice())?.collect();
+        emit_batches(sink, table, op, batches)?;
     }
     Ok(())
 }

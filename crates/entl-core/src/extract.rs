@@ -125,8 +125,9 @@ pub fn extract_duckdb(conn: &duckdb::Connection, tables: &[&str]) -> Result<Snap
             continue;
         }
         let mut stmt = conn.prepare(&format!("SELECT * FROM \"{t}\""))?;
-        let batches: Vec<duckdb::arrow::record_batch::RecordBatch> =
-            stmt.query_arrow([])?.collect();
+        let duck: Vec<duckdb::arrow::record_batch::RecordBatch> = stmt.query_arrow([])?.collect();
+        // Bridge duckdb's arrow → entl's arrow so cell_json (entl-typed) reads the columns.
+        let batches = crate::arrow_bridge::duckdb_batches_to_entl(duck)?;
         let mut rows = Vec::new();
         for batch in &batches {
             let schema = batch.schema();

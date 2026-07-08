@@ -20,12 +20,14 @@ use rayon::prelude::*;
 
 use crate::db::Db;
 use crate::stream::{ChangeBatch, ChangeOp, ChangeSink};
-use duckdb::arrow::array::{
+// These builders make batches that are EMITTED to the change stream (never written back into
+// duckdb — the write path is row-based `append_row`), so they build in entl's OWN arrow.
+use arrow::array::{
     ArrayRef, BinaryBuilder, BooleanBuilder, Int32Builder, StringBuilder,
     TimestampMicrosecondBuilder,
 };
-use duckdb::arrow::datatypes::{DataType, Field, Schema};
-use duckdb::arrow::record_batch::RecordBatch;
+use arrow::datatypes::{DataType, Field, Schema};
+use arrow::record_batch::RecordBatch;
 use std::sync::Arc;
 
 #[derive(Debug, Default)]
@@ -648,7 +650,7 @@ fn commits_batch(rows: &[CommitRow], repo_id: &str) -> Result<RecordBatch> {
         merge.append_value(r.is_merge);
         gpg.append_value(r.gpg_signed);
     }
-    let ts = || DataType::Timestamp(duckdb::arrow::datatypes::TimeUnit::Microsecond, None);
+    let ts = || DataType::Timestamp(arrow::datatypes::TimeUnit::Microsecond, None);
     let schema = Arc::new(Schema::new(vec![
         Field::new("oid", DataType::Binary, false),
         Field::new("repo_id", DataType::Utf8, false),

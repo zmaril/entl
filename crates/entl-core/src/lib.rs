@@ -2,6 +2,7 @@
 //! Write path uses the raw `duckdb` crate (Appender for bulk ingest); the
 //! schema is hand-written SQL migrations (no ORM in the core).
 
+pub mod arrow_bridge;
 pub mod binding;
 pub mod conflicts;
 pub mod db;
@@ -19,6 +20,11 @@ pub mod schema_gen;
 pub mod sink;
 pub mod stream;
 
+/// The Arrow batch type the change stream carries — re-exported so the generated
+/// bindings can name it (`entl_core::RecordBatch`) without their own arrow dep. This is
+/// entl's OWN arrow (the `arrow` crate), which floats independently of the arrow the
+/// `duckdb` crate bundles; duckdb-produced batches cross into it via `arrow_bridge`.
+pub use arrow::record_batch::RecordBatch;
 pub use conflicts::{analyze_conflicts, ConflictStats};
 pub use db::Db;
 pub use diff::{diff_commits, file_at, FileDiff};
@@ -26,9 +32,6 @@ pub use driver::{
     backfill, driver_tables, statement_channel, Dialect, DriverSink, Statement, StatementStream,
     StmtPoll,
 };
-/// The Arrow batch type the change stream carries — re-exported so the generated
-/// bindings can name it (`entl_core::RecordBatch`) without their own arrow dep.
-pub use duckdb::arrow::record_batch::RecordBatch;
 pub use extract::{
     extract_duckdb, extract_json, extract_jsonl, extract_postgres, extract_sqlite, Snapshot,
 };

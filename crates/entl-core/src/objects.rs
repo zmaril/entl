@@ -8,9 +8,10 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use duckdb::arrow::array::{ArrayRef, BinaryBuilder, BooleanBuilder, Int64Builder, StringBuilder};
-use duckdb::arrow::datatypes::{DataType, Field, Schema};
-use duckdb::arrow::record_batch::RecordBatch;
+// Builders for change-stream batches → entl's OWN arrow (the batches are emitted, not appended).
+use arrow::array::{ArrayRef, BinaryBuilder, BooleanBuilder, Int64Builder, StringBuilder};
+use arrow::datatypes::{DataType, Field, Schema};
+use arrow::record_batch::RecordBatch;
 use duckdb::params;
 use gix::bstr::ByteSlice;
 
