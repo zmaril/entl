@@ -9,7 +9,11 @@ description = "Node-API (napi-rs) binding: the entl engine, in-process in Node/B
 crate-type = ["cdylib"]
 
 [dependencies]
-napi = { version = "3", default-features = false, features = ["napi8"] }
+# `tokio_rt` gates the streaming surface the generated binding uses: napi's
+# re-exported `tokio` (spawn_blocking), `AsyncGenerator`, and the
+# `create_async_iterator` that `#[napi(async_iterator)]` expands to — the napi
+# analogue of python's pyo3-async-runtimes / ruby's async wiring.
+napi = { version = "3", default-features = false, features = ["napi8", "tokio_rt"] }
 napi-derive = "3"
 entl-core = { path = "../entl-core" }
 # the shared streaming contract (Poll/PollStream) the generated surface imports
