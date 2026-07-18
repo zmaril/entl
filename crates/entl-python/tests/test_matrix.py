@@ -39,5 +39,9 @@ def test_cross_language_matrix():
         if pg:
             schema = "m_" + "".join(c for c in name if c.isalnum() or c == "_")
             e3 = entl.Entl(":memory:")
-            e3.sink(repo, entl.SinkTarget.Postgres, path=pg, github=False, schema=schema)
-            assert e3.extract("postgres", pg, schema=schema) == expected, f"{name} postgres"
+            e3.sink(
+                repo, entl.SinkTarget.Postgres, path=pg, github=False, schema=schema
+            )
+            assert e3.extract("postgres", pg, schema=schema) == expected, (
+                f"{name} postgres"
+            )

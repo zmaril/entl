@@ -1,5 +1,5 @@
-import { Provider } from '@/components/provider';
-import type { ReactNode } from 'react';
+import type { ReactNode } from "react";
+import { Provider } from "@/components/provider";
 
 export default async function LangLayout({
   params,

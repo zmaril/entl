@@ -1,0 +1,27 @@
+# Minimal rubocop config for the Ruby (Magnus) binding. The crate is a thin
+# extension shim plus a smoke test, so this keeps rubocop to the checks that
+# matter here and aligns its opinions with the fleet's actual style (double
+# quotes, as in the Rust and TS sources) rather than rubocop's defaults.
+AllCops:
+  TargetRubyVersion: 3.3
+  NewCops: disable
+  SuggestExtensions: false
+
+# The repo quotes strings with double quotes across languages; match that.
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+# A magic frozen-string comment adds nothing to a two-file binding shim.
+Style/FrozenStringLiteralComment:
+  Enabled: false
+
+# The binding's smoke test intentionally drives a whole sink/query/extract +
+# Arrow-IPC round trip per test method; the size/complexity metrics fight that
+# shape with no real payoff here.
+Metrics:
+  Enabled: false
+
+# The Gemfile groups its two dev-only gems by role, with a comment; leave that
+# ordering as authored.
+Bundler/OrderedGems:
+  Enabled: false

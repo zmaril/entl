@@ -1,6 +1,6 @@
 """The SQLAlchemy read-plane models: query a real sink store through them, and confirm coverage.
 
-    python -m pytest tests/test_models.py    (needs the `orm` extra: sqlalchemy)
+python -m pytest tests/test_models.py    (needs the `orm` extra: sqlalchemy)
 """
 
 import os
@@ -17,7 +17,9 @@ from sqlalchemy.orm import Session
 def test_query_sink_through_models():
     repo = make_repo()
     sp = os.path.join(tempfile.mkdtemp(), "data.sqlite")
-    stats = entl.Entl(":memory:").sink(repo, entl.SinkTarget.Sqlite, path=sp, github=False)
+    stats = entl.Entl(":memory:").sink(
+        repo, entl.SinkTarget.Sqlite, path=sp, github=False
+    )
 
     engine = create_engine(f"sqlite:///{sp}")
     with Session(engine) as s:
@@ -29,8 +31,16 @@ def test_query_sink_through_models():
 
 def test_models_cover_every_sink_table():
     have = {m.__tablename__ for m in models.Base.__subclasses__()}
-    for t in ["commits", "commit_parents", "file_changes", "refs", "blobs",
-              "gh_pull_requests", "gh_issues", "gh_users"]:
+    for t in [
+        "commits",
+        "commit_parents",
+        "file_changes",
+        "refs",
+        "blobs",
+        "gh_pull_requests",
+        "gh_issues",
+        "gh_users",
+    ]:
         assert t in have, f"no model for {t}"
     assert set(models.ENTL_TABLES) == have
 

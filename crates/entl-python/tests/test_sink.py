@@ -20,8 +20,10 @@ REPO = os.environ.get("ENTL_TEST_REPO") or make_repo(commits=2)
 def _counts(db):
     con = sqlite3.connect(db)
     try:
-        return {t: con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
-                for t in ("commits", "file_changes", "refs")}
+        return {
+            t: con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
+            for t in ("commits", "file_changes", "refs")
+        }
     finally:
         con.close()
 

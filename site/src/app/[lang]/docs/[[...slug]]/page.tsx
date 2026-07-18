@@ -1,4 +1,4 @@
-import { getPageImage, getPageMarkdownUrl, source } from '@/lib/source';
+import { Card } from "fumadocs-ui/components/card";
 import {
   DocsBody,
   DocsDescription,
@@ -6,13 +6,13 @@ import {
   DocsTitle,
   MarkdownCopyButton,
   ViewOptionsPopover,
-} from 'fumadocs-ui/layouts/docs/page';
-import { notFound } from 'next/navigation';
-import { getMDXComponents } from '@/components/mdx';
-import type { Metadata } from 'next';
-import { createRelativeLink } from 'fumadocs-ui/mdx';
-import { Card } from 'fumadocs-ui/components/card';
-import { gitConfig } from '@/lib/shared';
+} from "fumadocs-ui/layouts/docs/page";
+import { createRelativeLink } from "fumadocs-ui/mdx";
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { getMDXComponents } from "@/components/mdx";
+import { gitConfig } from "@/lib/shared";
+import { getPageImage, getPageMarkdownUrl, source } from "@/lib/source";
 
 type Params = Promise<{ lang: string; slug?: string[] }>;
 
@@ -35,7 +35,9 @@ export default async function Page(props: { params: Params }) {
   return (
     <DocsPage toc={page.data.toc} full={page.data.full}>
       <DocsTitle>{page.data.title}</DocsTitle>
-      <DocsDescription className="mb-0">{page.data.description}</DocsDescription>
+      <DocsDescription className="mb-0">
+        {page.data.description}
+      </DocsDescription>
       <div className="flex flex-row gap-2 items-center border-b pb-6">
         <MarkdownCopyButton markdownUrl={markdownUrl} />
         <ViewOptionsPopover
@@ -48,8 +50,12 @@ export default async function Page(props: { params: Params }) {
           components={getMDXComponents({
             // relative file-path links resolve via createRelativeLink; absolute
             // internal links get the locale prefix via `localize`
-            a: ({ href, ...props }) => <RelLink href={localize(href)} {...props} />,
-            Card: ({ href, ...props }) => <Card href={localize(href)} {...props} />,
+            a: ({ href, ...props }) => (
+              <RelLink href={localize(href)} {...props} />
+            ),
+            Card: ({ href, ...props }) => (
+              <Card href={localize(href)} {...props} />
+            ),
           })}
         />
       </DocsBody>
@@ -61,7 +67,9 @@ export async function generateStaticParams() {
   return source.generateParams();
 }
 
-export async function generateMetadata(props: { params: Params }): Promise<Metadata> {
+export async function generateMetadata(props: {
+  params: Params;
+}): Promise<Metadata> {
   const { lang, slug } = await props.params;
   const page = source.getPage(slug, lang);
   if (!page) notFound();

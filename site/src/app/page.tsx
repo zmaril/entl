@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata } from "next";
 
 // Static-export-friendly root redirect: `/` → `/en`. Next.js middleware (the
 // usual way to do this) isn't available under `output: 'export'`, so we emit a

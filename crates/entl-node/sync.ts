@@ -12,7 +12,7 @@
 import type { Entl } from "./index.js";
 import type { EntlTable } from "./tables.gen";
 
-export { EntlTables, ENTL_TABLES, type EntlTable } from "./tables.gen";
+export { ENTL_TABLES, type EntlTable, EntlTables } from "./tables.gen";
 
 type Pg = {
   query(sql: string, params?: unknown[]): Promise<{ rows: unknown[] }>;
@@ -26,8 +26,6 @@ export interface SyncOptions {
   /** Target Postgres schema. Default `"entl"`. */
   schema?: string;
 }
-
-
 
 /**
  * Mirror the chosen entl tables into `pg`. Default: all tables, schema `entl`.
@@ -44,7 +42,10 @@ export async function syncInto(
   const plan = entl.driverPlan({
     tables: opts.tables ? [...opts.tables] : undefined,
     rename: opts.rename
-      ? Object.entries(opts.rename).map(([from, to]) => ({ from, to: to as string }))
+      ? Object.entries(opts.rename).map(([from, to]) => ({
+          from,
+          to: to as string,
+        }))
       : undefined,
     schema: opts.schema ?? "entl",
   });
@@ -56,7 +57,8 @@ export async function syncInto(
     const params = JSON.parse(stmt.params) as unknown[]; // params stay JSON by design: per-row and tiny (the Arrow handoff covers row payloads, not statements)
     await pg.query(stmt.sql, params);
     // A row upsert (has bound params) tallies against its source table.
-    if (stmt.table && params.length > 0) counts[stmt.table] = (counts[stmt.table] ?? 0) + 1;
+    if (stmt.table && params.length > 0)
+      counts[stmt.table] = (counts[stmt.table] ?? 0) + 1;
   }
   return counts;
 }

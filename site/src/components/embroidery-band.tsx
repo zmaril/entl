@@ -2,11 +2,20 @@
 // palette. Used as a textured strip along the bottom of the hero.
 export function EmbroideryBand({ className }: { className?: string }) {
   // the duckling palette, from the theme tokens in global.css
-  const y = 'var(--entl-yellow)';
-  const yd = 'var(--entl-yellow-dark)';
+  const y = "var(--entl-yellow)";
+  const yd = "var(--entl-yellow-dark)";
   // one cross-stitch flower: 8 petals around a centre, each a small square
   const stitch = (cx: number, cy: number, fill: string, opacity = 1) => (
-    <rect key={`${cx}-${cy}`} x={cx - 2} y={cy - 2} width={4} height={4} fill={fill} opacity={opacity} rx={0.5} />
+    <rect
+      key={`${cx}-${cy}`}
+      x={cx - 2}
+      y={cy - 2}
+      width={4}
+      height={4}
+      fill={fill}
+      opacity={opacity}
+      rx={0.5}
+    />
   );
   return (
     <svg
@@ -19,7 +28,12 @@ export function EmbroideryBand({ className }: { className?: string }) {
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
-        <pattern id="entl-embroidery" patternUnits="userSpaceOnUse" width="56" height="40">
+        <pattern
+          id="entl-embroidery"
+          patternUnits="userSpaceOnUse"
+          width="56"
+          height="40"
+        >
           {/* cross-stitch flower, centred at (28,15) */}
           {stitch(28, 15, yd)}
           {stitch(28, 8, y)}

@@ -25,15 +25,22 @@ export async function introspect(entl: EntlHandle): Promise<EntlTableMeta[]> {
        FROM information_schema.columns WHERE table_schema = 'main'
        ORDER BY table_name, ordinal_position`,
     ),
-  ) as { table_name: string; column_name: string; data_type: string; is_nullable: string }[];
+  ) as {
+    table_name: string;
+    column_name: string;
+    data_type: string;
+    is_nullable: string;
+  }[];
   const bases = new Set(
-    (JSON.parse(
-      await entl.query(
-        `SELECT table_name FROM information_schema.tables
+    (
+      JSON.parse(
+        await entl.query(
+          `SELECT table_name FROM information_schema.tables
          WHERE table_schema='main' AND table_type='BASE TABLE'
            AND table_name NOT LIKE '\\_%' ESCAPE '\\'`,
-      ),
-    ) as { table_name: string }[]).map((r) => r.table_name),
+        ),
+      ) as { table_name: string }[]
+    ).map((r) => r.table_name),
   );
   const pks = JSON.parse(
     await entl.query(
@@ -46,8 +53,15 @@ export async function introspect(entl: EntlHandle): Promise<EntlTableMeta[]> {
   for (const c of cols) {
     if (!bases.has(c.table_name) || EXCLUDE.has(c.table_name)) continue;
     let t = byTable.get(c.table_name);
-    if (!t) byTable.set(c.table_name, (t = { name: c.table_name, columns: [], pk: [] }));
-    t.columns.push({ name: c.column_name, type: c.data_type, notNull: c.is_nullable === "NO" });
+    if (!t) {
+      t = { name: c.table_name, columns: [], pk: [] };
+      byTable.set(c.table_name, t);
+    }
+    t.columns.push({
+      name: c.column_name,
+      type: c.data_type,
+      notNull: c.is_nullable === "NO",
+    });
   }
   for (const p of pks) {
     const t = byTable.get(p.table_name);

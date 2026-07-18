@@ -11,7 +11,7 @@
 // in place — so the deploy never fails on a missing source. Output carries an
 // AUTO-GENERATED banner; edit the sources, not the generated files.
 
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..", "..");
@@ -23,14 +23,22 @@ const OUT = join(import.meta.dir, "..", "content", "docs", "reference");
 
 const banner = (src: string) =>
   `{/* AUTO-GENERATED from ${src} by scripts/gen-reference.ts — run \`bun run gen\`. Do not edit by hand. */}\n\n`;
-const fm = (title: string, desc: string) => `---\ntitle: ${title}\ndescription: ${desc}\n---\n\n`;
+const fm = (title: string, desc: string) =>
+  `---\ntitle: ${title}\ndescription: ${desc}\n---\n\n`;
 // Source comments are arbitrary prose — escape `{`/`}` so MDX doesn't read e.g. a
 // GitHub API path template (`/repos/{o}/{r}/…`) as a JS expression.
 const mdxSafe = (s: string) => s.replace(/[{}]/g, "\\$&");
 
 // ----------------------------------------------------------------- schema ---
 
-type Col = { name: string; type: string; notNull: boolean; pk: boolean; def?: string; desc?: string };
+type Col = {
+  name: string;
+  type: string;
+  notNull: boolean;
+  pk: boolean;
+  def?: string;
+  desc?: string;
+};
 type Table = { name: string; cols: Col[]; desc?: string };
 
 // The schema reference as data: fluessig lowers the catalog (schema/entl.tsp) into
@@ -41,7 +49,14 @@ function parseTables(): Table[] {
   type Raw = {
     name: string;
     desc: string | null;
-    cols: { name: string; type: string; notNull: boolean; pk: boolean; def: string | null; desc: string | null }[];
+    cols: {
+      name: string;
+      type: string;
+      notNull: boolean;
+      pk: boolean;
+      def: string | null;
+      desc: string | null;
+    }[];
   };
   const raw = JSON.parse(readFileSync(SCHEMA_DOCS, "utf8")) as Raw[];
   return raw
@@ -62,10 +77,16 @@ function parseTables(): Table[] {
 
 function renderTable(t: Table): string {
   const withDesc = t.cols.some((c) => c.desc);
-  const head = withDesc ? "| Column | Type | Description | |\n|---|---|---|---|" : "| Column | Type | |\n|---|---|---|";
+  const head = withDesc
+    ? "| Column | Type | Description | |\n|---|---|---|---|"
+    : "| Column | Type | |\n|---|---|---|";
   const rows = t.cols
     .map((c) => {
-      const notes = [c.pk ? "**PK**" : "", c.notNull && !c.pk ? "not null" : "", c.def ? `default \`${c.def}\`` : ""]
+      const notes = [
+        c.pk ? "**PK**" : "",
+        c.notNull && !c.pk ? "not null" : "",
+        c.def ? `default \`${c.def}\`` : "",
+      ]
         .filter(Boolean)
         .join(", ");
       const desc = mdxSafe(c.desc ?? "").replace(/\|/g, "\\|"); // escape pipes + braces for the cell
@@ -102,7 +123,12 @@ ${gh.map(renderTable).join("\n")}`;
 
 // --------------------------------------------------------------- node api ---
 
-type Entry = { name: string; kind: "function" | "class" | "interface"; code: string; doc: string };
+type Entry = {
+  name: string;
+  kind: "function" | "class" | "interface";
+  code: string;
+  doc: string;
+};
 
 function parseDts(): Entry[] {
   const lines = readFileSync(DTS, "utf8").split("\n");
@@ -119,13 +145,21 @@ function parseDts(): Entry[] {
     }
     if (inDoc) {
       if (line.includes("*/")) inDoc = false;
-      const text = line.replace(/^\s*\*\/?/, "").replace(/\*\/\s*$/, "").trim();
+      const text = line
+        .replace(/^\s*\*\/?/, "")
+        .replace(/\*\/\s*$/, "")
+        .trim();
       if (text) doc += `${text} `;
       continue;
     }
     const fn = line.match(/^export declare function (\w+)/);
     if (fn) {
-      entries.push({ name: fn[1], kind: "function", code: line.replace(/^export declare /, ""), doc: doc.trim() });
+      entries.push({
+        name: fn[1],
+        kind: "function",
+        code: line.replace(/^export declare /, ""),
+        doc: doc.trim(),
+      });
       doc = "";
       continue;
     }
@@ -136,7 +170,12 @@ function parseDts(): Entry[] {
         i++;
         body.push(lines[i]);
       }
-      entries.push({ name: block[2], kind: block[1] as "class" | "interface", code: body.join("\n"), doc: doc.trim() });
+      entries.push({
+        name: block[2],
+        kind: block[1] as "class" | "interface",
+        code: body.join("\n"),
+        doc: doc.trim(),
+      });
       doc = "";
       continue;
     }
@@ -145,7 +184,10 @@ function parseDts(): Entry[] {
   return entries;
 }
 
-function renderEntry(e: { name: string; doc: string; code: string }, lang = "ts"): string {
+function renderEntry(
+  e: { name: string; doc: string; code: string },
+  lang = "ts",
+): string {
   return `### \`${e.name}\`\n\n${e.doc ? `${e.doc}\n\n` : ""}\`\`\`${lang}\n${e.code.trim()}\n\`\`\`\n`;
 }
 
@@ -225,7 +267,8 @@ function captureFnSig(lines: string[], idx: number): string {
 }
 
 function captureStruct(lines: string[], idx: number): string {
-  if (lines[idx].includes(";") || !lines[idx].includes("{")) return lines[idx].trim();
+  if (lines[idx].includes(";") || !lines[idx].includes("{"))
+    return lines[idx].trim();
   let depth = 0;
   let out = "";
   for (let i = idx; i < lines.length; i++) {
@@ -240,25 +283,36 @@ function captureStruct(lines: string[], idx: number): string {
 }
 
 function genRustApi(): string {
-  const files = walkRs(CORE_SRC).map((p) => ({ lines: readFileSync(p, "utf8").split("\n") }));
+  const files = walkRs(CORE_SRC).map((p) => ({
+    lines: readFileSync(p, "utf8").split("\n"),
+  }));
   const exports = libExports();
   const fns: { name: string; doc: string; code: string }[] = [];
   const types: { name: string; doc: string; code: string }[] = [];
 
   for (const name of exports) {
     for (const { lines } of files) {
-      const fnIdx = lines.findIndex((l) => new RegExp(`^\\s*pub fn ${name}\\b`).test(l));
+      const fnIdx = lines.findIndex((l) =>
+        new RegExp(`^\\s*pub fn ${name}\\b`).test(l),
+      );
       if (fnIdx >= 0) {
-        fns.push({ name, doc: docAbove(lines, fnIdx), code: captureFnSig(lines, fnIdx).replace(/^pub /, "") });
+        fns.push({
+          name,
+          doc: docAbove(lines, fnIdx),
+          code: captureFnSig(lines, fnIdx).replace(/^pub /, ""),
+        });
         break;
       }
-      const tyIdx = lines.findIndex((l) => new RegExp(`^\\s*pub (?:struct|enum) ${name}\\b`).test(l));
+      const tyIdx = lines.findIndex((l) =>
+        new RegExp(`^\\s*pub (?:struct|enum) ${name}\\b`).test(l),
+      );
       if (tyIdx >= 0) {
         let code = captureStruct(lines, tyIdx).replace(/^pub /, "");
         // For Db, append its public methods (constructors etc.).
         if (name === "Db") {
           const methods = implMethods(files, "Db");
-          if (methods.length) code += `\n\nimpl Db {\n${methods.map((m) => `    ${m.code};`).join("\n")}\n}`;
+          if (methods.length)
+            code += `\n\nimpl Db {\n${methods.map((m) => `    ${m.code};`).join("\n")}\n}`;
         }
         types.push({ name, doc: docAbove(lines, tyIdx), code });
         break;
@@ -283,11 +337,15 @@ ${types.map((x) => renderEntry(x, "rust")).join("\n")}
 ${fns.map((x) => renderEntry(x, "rust")).join("\n")}`;
 }
 
-function implMethods(files: { lines: string[] }[], type: string): { name: string; code: string }[] {
+function implMethods(
+  files: { lines: string[] }[],
+  type: string,
+): { name: string; code: string }[] {
   const out: { name: string; code: string }[] = [];
   for (const { lines } of files) {
     for (let i = 0; i < lines.length; i++) {
-      if (!new RegExp(`^impl(?:<[^>]*>)?\\s+${type}\\b`).test(lines[i].trim())) continue;
+      if (!new RegExp(`^impl(?:<[^>]*>)?\\s+${type}\\b`).test(lines[i].trim()))
+        continue;
       let depth = 0;
       let started = false;
       for (let j = i; j < lines.length; j++) {
@@ -298,7 +356,11 @@ function implMethods(files: { lines: string[] }[], type: string): { name: string
           } else if (ch === "}") depth--;
         }
         const fn = lines[j].match(/^\s*pub fn (\w+)/);
-        if (fn && j > i) out.push({ name: fn[1], code: captureFnSig(lines, j).replace(/^\s*pub /, "") });
+        if (fn && j > i)
+          out.push({
+            name: fn[1],
+            code: captureFnSig(lines, j).replace(/^\s*pub /, ""),
+          });
         if (started && depth === 0) {
           i = j;
           break;

@@ -1,0 +1,13 @@
+# Coverage policy for entl's Python binding (crates/entl-python). The suite runs
+# from that crate under pytest-cov; CI points pytest at this file via
+# --cov-config so the repo keeps one coverage config at the root.
+[run]
+source_pkgs = entl
+branch = true
+
+[report]
+show_missing = true
+# The compiled extension (entl._entl) is Rust — Python coverage can't see into
+# it, and the generated ORM (entl.models) is codegen, not hand-written logic.
+omit =
+    */entl/models.py
