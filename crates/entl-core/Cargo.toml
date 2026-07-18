@@ -28,7 +28,7 @@ gix = { version = "0.85.0", features = ["merge"] }
 gix-imara-diff = { version = "0.2.3", features = ["unified_diff"] }
 http = "1.4.2"
 native-tls = "0.2"
-octocrab = "0.53.1"
+octocrab = "0.54.0"
 postgres = { version = "0.19", features = ["with-chrono-0_4"] }
 postgres-native-tls = "0.5"
 rayon = "1.12.0"
