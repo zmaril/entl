@@ -8,3 +8,19 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+  - package-ecosystem: "bun"
+    directory: "/crates/entl-node"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "bun"
+    directory: "/site"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "bundler"
+    directory: "/crates/entl-ruby"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "uv"
+    directory: "/crates/entl-python"
+    schedule:
+      interval: "weekly"
