@@ -115,7 +115,7 @@ jobs:
           # against (a branch pin makes this job hostage to tool merges — a
           # fluessig change landed on main breaks freshness here until we bump).
           # Bump deliberately when adopting a new fluessig.
-          FLUESSIG_REF: fc8956b9d3c0fad3803ee078056d75e249f1b1e0  # tagged unions + MCP + observe
+          FLUESSIG_REF: be07ecf0c490ff6ecb61c6d374aff7bb679f55fc  # pins @typespec/compiler 1.14.0 (byte-stable emitter) + node string-enums
         run: |
           # Clone into RUNNER_TEMP (outside the workspace) so it can't register
           # as drift in the git-clean check below. Fetch the pinned SHA directly
