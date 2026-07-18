@@ -16,9 +16,12 @@
     "build": "napi build --platform --release",
     "build:debug": "napi build --platform",
     "gen": "bash ../../scripts/gen.sh",
-    "test": "bun test"
+    "test": "bun test",
+    "lint": "biome check",
+    "format": "biome format --write"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
     "@electric-sql/pglite": "^0.5.3",
     "@napi-rs/cli": "^3.4.2",
     "apache-arrow": "^21.1.0",

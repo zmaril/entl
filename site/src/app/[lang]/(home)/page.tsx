@@ -1,7 +1,7 @@
-import Link from 'next/link';
-import { Boxes, Database, GitBranch, HardDrive } from 'lucide-react';
-import { EmbroideryBand } from '@/components/embroidery-band';
-import { i18n } from '@/lib/i18n';
+import { Boxes, Database, GitBranch, HardDrive } from "lucide-react";
+import Link from "next/link";
+import { EmbroideryBand } from "@/components/embroidery-band";
+import { i18n } from "@/lib/i18n";
 
 export function generateStaticParams() {
   return i18n.languages.map((lang) => ({ lang }));
@@ -10,49 +10,57 @@ export function generateStaticParams() {
 const features = [
   {
     icon: Database,
-    title: 'One engine, every shape',
+    title: "One engine, every shape",
     body: "Streaming, OLTP, and OLAP over the same local store. Repos aren't that big — your tools shouldn't pretend they are.",
   },
   {
     icon: GitBranch,
-    title: 'git + forge, unified',
-    body: 'Commits, refs, diffs, PRs, reviews, CI, events — one schema, queryable with plain SQL.',
+    title: "git + forge, unified",
+    body: "Commits, refs, diffs, PRs, reviews, CI, events — one schema, queryable with plain SQL.",
   },
   {
     icon: Boxes,
-    title: 'Embeddable',
-    body: 'Run in-process in Node/Bun via native bindings, or reach for the CLI and the Rust crate.',
+    title: "Embeddable",
+    body: "Run in-process in Node/Bun via native bindings, or reach for the CLI and the Rust crate.",
   },
   {
     icon: HardDrive,
-    title: 'Local-first',
-    body: 'No service to run, nothing leaves your machine. Fetch once, query forever.',
+    title: "Local-first",
+    body: "No service to run, nothing leaves your machine. Fetch once, query forever.",
   },
 ];
 
 const schemaTokens = [
-  'commits',
-  'refs',
-  'file_changes',
-  'gh_pull_requests',
-  'gh_reviews',
-  'gh_checks',
-  'gh_events',
+  "commits",
+  "refs",
+  "file_changes",
+  "gh_pull_requests",
+  "gh_reviews",
+  "gh_checks",
+  "gh_events",
 ];
 
-export default async function HomePage(props: { params: Promise<{ lang: string }> }) {
+export default async function HomePage(props: {
+  params: Promise<{ lang: string }>;
+}) {
   const { lang } = await props.params;
   return (
     <main className="flex flex-1 flex-col">
       <section
         className="relative overflow-hidden text-white"
-        style={{ background: 'linear-gradient(160deg, var(--entl-green-deep), var(--entl-green))' }}
+        style={{
+          background:
+            "linear-gradient(160deg, var(--entl-green-deep), var(--entl-green))",
+        }}
       >
         {/* warm duckling-yellow glow */}
         <div
           aria-hidden
           className="pointer-events-none absolute -right-24 -top-32 h-[34rem] w-[34rem] rounded-full opacity-25 blur-3xl"
-          style={{ background: 'radial-gradient(circle, var(--entl-yellow), transparent 62%)' }}
+          style={{
+            background:
+              "radial-gradient(circle, var(--entl-yellow), transparent 62%)",
+          }}
         />
 
         <div className="relative mx-auto flex max-w-5xl flex-col items-center gap-10 px-6 pb-28 pt-20 md:flex-row md:items-center md:gap-14">
@@ -72,11 +80,14 @@ export default async function HomePage(props: { params: Promise<{ lang: string }
               The local engine for git + forge data.
             </p>
             <p className="mx-auto mt-3 max-w-xl text-white/80 md:mx-0">
-              Streaming, OLTP, and OLAP over one DuckDB file — query a repo's history and forge
-              activity locally, in any major language.
+              Streaming, OLTP, and OLAP over one DuckDB file — query a repo's
+              history and forge activity locally, in any major language.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-4 md:justify-start">
-              <Link href={`/${lang}/docs/getting-started`} className="btn-duck rounded-lg px-5 py-2.5">
+              <Link
+                href={`/${lang}/docs/getting-started`}
+                className="btn-duck rounded-lg px-5 py-2.5"
+              >
                 Get started →
               </Link>
               <Link
@@ -90,7 +101,9 @@ export default async function HomePage(props: { params: Promise<{ lang: string }
               {schemaTokens.map((t, i) => (
                 <span key={t}>
                   {t}
-                  {i < schemaTokens.length - 1 ? <span className="ml-3 text-white/30">·</span> : null}
+                  {i < schemaTokens.length - 1 ? (
+                    <span className="ml-3 text-white/30">·</span>
+                  ) : null}
                 </span>
               ))}
             </div>
@@ -112,8 +125,9 @@ export default async function HomePage(props: { params: Promise<{ lang: string }
               <div
                 className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg"
                 style={{
-                  backgroundColor: 'color-mix(in srgb, var(--entl-green) 14%, transparent)',
-                  color: 'var(--color-fd-primary)',
+                  backgroundColor:
+                    "color-mix(in srgb, var(--entl-green) 14%, transparent)",
+                  color: "var(--color-fd-primary)",
                 }}
               >
                 <Icon className="h-5 w-5" />

@@ -34,6 +34,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
       docs: ${{ steps.filter.outputs.docs }}
+      web: ${{ steps.filter.outputs.web }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
@@ -45,6 +46,9 @@ jobs:
               - '!site/**'
               - '!notes/**'
               - '!**/*.md'
+            web:
+              - 'site/**'
+              - '.github/workflows/ci.yml'
             docs:
               - 'crates/**'
               - 'Cargo.toml'
@@ -106,9 +110,15 @@ jobs:
         run: |
           bun install
           bun run build
+      # lint + format gate for the hand-written TS (biome covers both). The
+      # generated schema.gen.ts / tables.gen.ts / index.* are excluded in
+      # crates/entl-node/biome.json so the generator stays the sole author.
+      - name: biome check (lint + format)
+        working-directory: crates/entl-node
+        run: bunx @biomejs/biome check .
       - name: bun test (PGlite e2e + coverage)
         working-directory: crates/entl-node
-        run: bun test
+        run: bun test --coverage
       - name: codegen freshness — regenerate everything, fail on drift
         env:
           # The schema tool lives in its own repo; pin the SHA entl generates
@@ -153,7 +163,11 @@ jobs:
           .venv/bin/pip install --quiet --upgrade pip
           .venv/bin/pip install --quiet --group dev
           .venv/bin/maturin develop --quiet
-          .venv/bin/python -m pytest tests/ -q
+          # lint + format gate (the generated python/entl/models.py is excluded
+          # in pyproject's [tool.ruff]). pytest-cov gives the coverage signal.
+          .venv/bin/ruff check .
+          .venv/bin/ruff format --check .
+          .venv/bin/python -m pytest tests/ -q --cov=entl --cov-config=../../.coveragerc
 
   ruby:
     name: ruby binding
@@ -185,6 +199,10 @@ jobs:
           bundle exec ruby extconf.rb
           make
           bundle exec ruby -I. -Itest test/test_entl.rb
+      # lint + format gate (rubocop covers both); config in crates/entl-ruby/.rubocop.yml
+      - name: rubocop (lint + format)
+        working-directory: crates/entl-ruby
+        run: bundle exec rubocop
 
   postgres:
     name: postgres sink (testkit round-trips)
@@ -254,3 +272,22 @@ jobs:
           test -f ../crates/entl-node/index.js
           test -x ../crates/entl-python/.venv/bin/python
           bun test examples.test.ts
+
+  web:
+    name: docs site (lint + format)
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      # biome covers both lint and format for the site's hand-written TS/TSX.
+      # The dep is already in site/package.json (@biomejs/biome), so a plain
+      # install brings it in; no napi/rust toolchain needed for this leg.
+      - name: install site deps
+        working-directory: site
+        run: bun install
+      - name: biome check (lint + format)
+        working-directory: site
+        run: bunx @biomejs/biome check .

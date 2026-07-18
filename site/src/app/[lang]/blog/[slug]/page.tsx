@@ -1,9 +1,9 @@
-import { getMDXComponents } from '@/components/mdx';
-import { blogSource } from '@/lib/source';
-import { DocsBody } from 'fumadocs-ui/layouts/docs/page';
-import type { Metadata } from 'next';
-import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { DocsBody } from "fumadocs-ui/layouts/docs/page";
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { getMDXComponents } from "@/components/mdx";
+import { blogSource } from "@/lib/source";
 
 type Params = Promise<{ lang: string; slug: string }>;
 
@@ -16,7 +16,10 @@ export default async function Page(props: { params: Params }) {
 
   return (
     <main className="mx-auto w-full max-w-3xl px-6 py-16">
-      <Link href={`/${lang}/blog`} className="text-sm text-fd-muted-foreground hover:underline">
+      <Link
+        href={`/${lang}/blog`}
+        className="text-sm text-fd-muted-foreground hover:underline"
+      >
         ← Blog
       </Link>
       <h1 className="mt-4 text-3xl font-bold">{page.data.title}</h1>
@@ -31,10 +34,14 @@ export default async function Page(props: { params: Params }) {
 }
 
 export function generateStaticParams() {
-  return blogSource.getPages().map((p) => ({ lang: p.locale, slug: p.slugs[0] }));
+  return blogSource
+    .getPages()
+    .map((p) => ({ lang: p.locale, slug: p.slugs[0] }));
 }
 
-export async function generateMetadata(props: { params: Params }): Promise<Metadata> {
+export async function generateMetadata(props: {
+  params: Params;
+}): Promise<Metadata> {
   const { lang, slug } = await props.params;
   const page = blogSource.getPage([slug], lang);
   if (!page) notFound();

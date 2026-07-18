@@ -1,7 +1,7 @@
-import { uiTranslations } from 'fumadocs-ui/i18n';
-import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
-import { i18n } from './i18n';
-import { appName, gitConfig } from './shared';
+import { uiTranslations } from "fumadocs-ui/i18n";
+import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
+import { i18n } from "./i18n";
+import { appName, gitConfig } from "./shared";
 
 // UI string packs per locale. `uiTranslations()` supplies Fumadocs's built-in
 // strings; `.add()` layers our own (currently just the switcher display name).
@@ -10,7 +10,7 @@ export const translations = i18n
   .extend(uiTranslations())
   .add({
     en: {
-      displayName: 'English',
+      displayName: "English",
     },
   });
 
@@ -36,8 +36,8 @@ export function baseOptions(locale: string): BaseLayoutProps {
       url: `/${locale}`,
     },
     links: [
-      { text: 'Docs', url: `/${locale}/docs`, active: 'nested-url' },
-      { text: 'Blog', url: `/${locale}/blog`, active: 'nested-url' },
+      { text: "Docs", url: `/${locale}/docs`, active: "nested-url" },
+      { text: "Blog", url: `/${locale}/blog`, active: "nested-url" },
     ],
     githubUrl: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,
   };

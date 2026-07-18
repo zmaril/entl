@@ -46,7 +46,9 @@ def test_query_arrow_is_the_dataframe_on_ramp():
     e = entl.Entl(":memory:")
     e.load_git(repo)
 
-    t = pa.ipc.open_stream(e.query_arrow("SELECT oid, author_name FROM commits")).read_all()
+    t = pa.ipc.open_stream(
+        e.query_arrow("SELECT oid, author_name FROM commits")
+    ).read_all()
     assert t.num_rows == 1
     assert t.schema.names == ["oid", "author_name"]
     # Native Arrow semantics: oid is Binary (20 raw bytes), not hex text.

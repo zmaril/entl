@@ -5,11 +5,11 @@
 //
 //   cd site && bun test examples.test.ts
 
-import { test, expect } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { dirname, join } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 
 const SITE = import.meta.dir;
 const ROOT = join(SITE, "..");
@@ -33,7 +33,9 @@ function blocks(md: string): { lang: string; code: string }[] {
     const code: string[] = [];
     let j = i + 1;
     for (; j < lines.length && !/^\s*```\s*$/.test(lines[j]); j++) {
-      code.push(lines[j].startsWith(indent) ? lines[j].slice(indent.length) : lines[j]);
+      code.push(
+        lines[j].startsWith(indent) ? lines[j].slice(indent.length) : lines[j],
+      );
     }
     out.push({ lang, code: code.join("\n") });
     i = j;
@@ -55,7 +57,10 @@ t("cookbook examples all run", () => {
   const T = mkdtempSync(join(tmpdir(), "entl-ex-"));
   const setup = run(
     "bash",
-    ["-c", "git init -q repo && cd repo && git config user.email t@e.com && git config user.name Tester && printf 'hello\\n' > a.txt && git add -A && git commit -qm first"],
+    [
+      "-c",
+      "git init -q repo && cd repo && git config user.email t@e.com && git config user.name Tester && printf 'hello\\n' > a.txt && git add -A && git commit -qm first",
+    ],
     T,
   );
   expect(setup.status, setup.stderr).toBe(0);
@@ -64,7 +69,7 @@ t("cookbook examples all run", () => {
   for (const doc of DOCS) {
     for (const b of blocks(readFileSync(doc, "utf8"))) {
       if (!RUNNABLE.has(b.lang)) continue;
-      let r;
+      let r: ReturnType<typeof run>;
       if (b.lang === "sh" || b.lang === "bash") {
         r = run("bash", ["-eu", "-c", b.code], T, dirname(ENTL_BIN!));
       } else if (b.lang === "js" || b.lang === "ts") {
@@ -74,7 +79,15 @@ t("cookbook examples all run", () => {
         // apache-arrow (a devDep there; site/ stays install-free for this test).
         const code = b.code
           .replaceAll('"@entl/node"', JSON.stringify(NODE_INDEX))
-          .replaceAll('"apache-arrow"', JSON.stringify(join(ROOT, "crates/entl-node/node_modules/apache-arrow/Arrow.mjs")));
+          .replaceAll(
+            '"apache-arrow"',
+            JSON.stringify(
+              join(
+                ROOT,
+                "crates/entl-node/node_modules/apache-arrow/Arrow.mjs",
+              ),
+            ),
+          );
         writeFileSync(file, code);
         r = run("bun", [file], T);
       } else {
@@ -83,7 +96,9 @@ t("cookbook examples all run", () => {
         r = run(PY, [file], T);
       }
       if (r.status !== 0) {
-        failures.push(`[${b.lang}] exit ${r.status}\n${b.code}\n--- stderr ---\n${r.stderr}`);
+        failures.push(
+          `[${b.lang}] exit ${r.status}\n${b.code}\n--- stderr ---\n${r.stderr}`,
+        );
       }
     }
   }

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.2.0/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.2/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -7,7 +7,15 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!node_modules", "!.next", "!dist", "!build", "!.source"]
+    "includes": [
+      "**",
+      "!node_modules",
+      "!*.node",
+      "!index.js",
+      "!index.d.ts",
+      "!schema.gen.ts",
+      "!tables.gen.ts"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -18,10 +26,6 @@
     "enabled": true,
     "rules": {
       "recommended": true
-    },
-    "domains": {
-      "next": "recommended",
-      "react": "recommended"
     }
   },
   "assist": {

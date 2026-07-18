@@ -3,11 +3,11 @@
 // the reference snapshot the Rust corpus generator produced (`expected.json`). Set ENTL_CORPUS to
 // a `gen_corpus` output directory to run.
 
-import { test, expect } from "bun:test";
-import { Entl, SinkTarget } from "./index.js";
-import { readdirSync, readFileSync, mkdtempSync } from "node:fs";
-import { join } from "node:path";
+import { expect, test } from "bun:test";
+import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Entl, SinkTarget } from "./index.js";
 
 const corpus = process.env.ENTL_CORPUS;
 const t = corpus ? test : test.skip;
@@ -21,13 +21,21 @@ t("cross-language P1 matrix (git tables) via Node", async () => {
     // SQLite
     const spath = join(mkdtempSync(join(tmpdir(), "entl-s-")), "s.db");
     const e1 = new Entl(":memory:");
-    await e1.sink(repo, { target: SinkTarget.Sqlite, path: spath, github: false });
+    await e1.sink(repo, {
+      target: SinkTarget.Sqlite,
+      path: spath,
+      github: false,
+    });
     expect(await e1.extract({ source: "sqlite", path: spath })).toBe(expected);
 
     // JSONL
     const jdir = mkdtempSync(join(tmpdir(), "entl-j-"));
     const e2 = new Entl(":memory:");
-    await e2.sink(repo, { target: SinkTarget.Jsonl, path: jdir, github: false });
+    await e2.sink(repo, {
+      target: SinkTarget.Jsonl,
+      path: jdir,
+      github: false,
+    });
     expect(await e2.extract({ source: "jsonl", path: jdir })).toBe(expected);
 
     // Postgres (gated) — a fresh schema per world
@@ -35,8 +43,15 @@ t("cross-language P1 matrix (git tables) via Node", async () => {
     if (pg) {
       const schema = "m_" + name.replace(/[^a-z0-9_]/gi, "");
       const e3 = new Entl(":memory:");
-      await e3.sink(repo, { target: SinkTarget.Postgres, path: pg, github: false, schema });
-      expect(await e3.extract({ source: "postgres", path: pg, schema })).toBe(expected);
+      await e3.sink(repo, {
+        target: SinkTarget.Postgres,
+        path: pg,
+        github: false,
+        schema,
+      });
+      expect(await e3.extract({ source: "postgres", path: pg, schema })).toBe(
+        expected,
+      );
     }
   }
 });

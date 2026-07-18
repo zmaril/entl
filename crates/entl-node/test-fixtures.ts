@@ -3,12 +3,13 @@
 
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 export function fixtureRepo(): string {
   const repo = mkdtempSync(join(tmpdir(), "entl-test-repo-"));
-  const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args], { stdio: "ignore" });
+  const git = (...args: string[]) =>
+    execFileSync("git", ["-C", repo, ...args], { stdio: "ignore" });
   execFileSync("git", ["init", "-q", repo], { stdio: "ignore" });
   git("config", "user.email", "t@e.com");
   git("config", "user.name", "Tester");
