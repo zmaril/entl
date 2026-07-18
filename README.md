@@ -1,3 +1,5 @@
+<!-- housekeeper:description Pull a repo's git history + forge activity into streaming data — any language, any database. Pre-release. -->
+<!-- housekeeper:topics change-data-capture, data-engineering, duckdb, git, github, rust, sql -->
 # Entl
 
 <p align="center">
