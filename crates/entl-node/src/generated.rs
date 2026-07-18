@@ -28,11 +28,14 @@ pub trait PollStream<T>: Send + Sync {
 /// Bulk bytes cross into JS as a Buffer (Arrow IPC payloads and friends).
 pub type Bytes = napi::bindgen_prelude::Buffer;
 
-#[napi]
+#[napi(string_enum)]
 #[derive(Clone, Copy)]
 pub enum SinkTarget {
+    #[napi(value = "sqlite")]
     Sqlite,
+    #[napi(value = "jsonl")]
     Jsonl,
+    #[napi(value = "postgres")]
     Postgres,
 }
 
