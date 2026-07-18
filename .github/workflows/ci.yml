@@ -94,7 +94,7 @@ jobs:
       # install and the externally-cloned fluessig codegen step skip re-fetching
       # deps. Caching only the download caches keeps codegen output untouched, so
       # it can't trip the freshness check below.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.bun/install/cache
