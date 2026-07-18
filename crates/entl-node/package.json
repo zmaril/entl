@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
-    "@electric-sql/pglite": "^0.5.3",
+    "@electric-sql/pglite": "^0.5.4",
     "@napi-rs/cli": "^3.4.2",
     "apache-arrow": "^21.1.0",
     "drizzle-orm": "^0.45.2"
