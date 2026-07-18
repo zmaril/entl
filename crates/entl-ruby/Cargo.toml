@@ -15,5 +15,7 @@ crate-type = ["cdylib"]
 magnus = { version = "0.8", features = ["bytes"] }
 bytes = "1"
 entl-core = { path = "../entl-core" }
+# the shared streaming contract (Poll/PollStream) the generated surface imports
+fluessig-runtime = { workspace = true }
 anyhow = "1"
 serde_json = "1"

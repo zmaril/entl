@@ -12,6 +12,8 @@ crate-type = ["cdylib"]
 napi = { version = "3", default-features = false, features = ["napi8"] }
 napi-derive = "3"
 entl-core = { path = "../entl-core" }
+# the shared streaming contract (Poll/PollStream) the generated surface imports
+fluessig-runtime = { workspace = true }
 serde_json = "1.0.150"
 anyhow = "1"
 

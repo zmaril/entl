@@ -1,8 +1,7 @@
 {
   "fluessig": {
     "format": 1,
-    "emitter": "0.0.0",
-    "compiler": "1.14.0"
+    "emitter": "fluessig-derive/0"
   },
   "source": "entl.tsp",
   "models": [
@@ -211,7 +210,6 @@
     },
     {
       "name": "TableRename",
-      "doc": null,
       "fields": [
         {
           "name": "from",
@@ -227,7 +225,6 @@
     },
     {
       "name": "SinkOptions",
-      "doc": null,
       "fields": [
         {
           "name": "target",
@@ -283,7 +280,6 @@
     },
     {
       "name": "ExtractOptions",
-      "doc": null,
       "fields": [
         {
           "name": "source",
@@ -311,7 +307,6 @@
     },
     {
       "name": "RebuildOptions",
-      "doc": null,
       "fields": [
         {
           "name": "source",
@@ -337,7 +332,6 @@
     },
     {
       "name": "ChangesOptions",
-      "doc": null,
       "fields": [
         {
           "name": "github",
@@ -353,7 +347,6 @@
     },
     {
       "name": "DriverPlanOptions",
-      "doc": null,
       "fields": [
         {
           "name": "tables",
@@ -444,7 +437,6 @@
         },
         {
           "name": "branchExists",
-          "doc": null,
           "shape": "unary",
           "params": [
             {
@@ -460,7 +452,6 @@
         },
         {
           "name": "currentBranch",
-          "doc": null,
           "shape": "unary",
           "params": [
             {
