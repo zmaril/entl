@@ -1,8 +1,7 @@
 {
   "fluessig": {
     "format": 1,
-    "emitter": "0.0.0",
-    "compiler": "1.14.0"
+    "emitter": "fluessig-derive/0"
   },
   "source": "entl.tsp",
   "scalars": [
@@ -135,7 +134,7 @@
           "nullable": false
         },
         {
-          "name": "remoteUrl",
+          "name": "remote_url",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -167,7 +166,7 @@
           "nullable": true
         },
         {
-          "name": "defaultBranch",
+          "name": "default_branch",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -176,7 +175,7 @@
           "doc": "from the forge (`repos/{o}/{r}`), when a GitHub sync has run"
         },
         {
-          "name": "homepageUrl",
+          "name": "homepage_url",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -185,7 +184,7 @@
           "doc": "the repo's homepage URL from the forge, when set"
         },
         {
-          "name": "firstSyncedAt",
+          "name": "first_synced_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -193,7 +192,7 @@
           "nullable": true
         },
         {
-          "name": "lastSyncedAt",
+          "name": "last_synced_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -206,14 +205,14 @@
       "name": "GitNote",
       "table": "git_notes",
       "key": [
-        "repo",
-        "notesRef",
-        "annotatedOid"
+        "repo_id",
+        "notes_ref",
+        "annotated_oid"
       ],
       "doc": "A git note (`refs/notes/*`): free-form text attached to any object after the\nfact, without rewriting it. Mutable per-repo state like refs — each sync\nreplaces the repo's rows. The default ref is `refs/notes/commits`; other\nnamespaces ride the notesRef column.",
       "fields": [
         {
-          "name": "repo",
+          "name": "repo_id",
           "type": {
             "k": "ref",
             "name": "Repo",
@@ -225,17 +224,13 @@
             "to": "Repo",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "repo_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
-          "name": "notesRef",
+          "name": "notes_ref",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -245,7 +240,7 @@
           "key": true
         },
         {
-          "name": "annotatedOid",
+          "name": "annotated_oid",
           "type": {
             "k": "scalar",
             "name": "Oid",
@@ -285,7 +280,7 @@
           "key": true
         },
         {
-          "name": "repo",
+          "name": "repo_id",
           "type": {
             "k": "ref",
             "name": "Repo",
@@ -297,13 +292,9 @@
             "to": "Repo",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "repo_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         }
       ]
@@ -316,7 +307,7 @@
       "doc": "One row per commit, walked from every ref. Author and committer time/identity\nare kept separate; `summary` is the first line of `message`.",
       "fields": [
         {
-          "name": "tree",
+          "name": "tree_oid",
           "type": {
             "k": "ref",
             "name": "Tree",
@@ -328,13 +319,9 @@
             "to": "Tree",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "tree_oid"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
@@ -356,7 +343,7 @@
           "doc": "first line of the message"
         },
         {
-          "name": "authorName",
+          "name": "author_name",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -364,7 +351,7 @@
           "nullable": true
         },
         {
-          "name": "authorEmail",
+          "name": "author_email",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -372,7 +359,7 @@
           "nullable": true
         },
         {
-          "name": "authorWhen",
+          "name": "author_when",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -380,7 +367,7 @@
           "nullable": true
         },
         {
-          "name": "authorTz",
+          "name": "author_tz",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -388,7 +375,7 @@
           "nullable": true
         },
         {
-          "name": "committerName",
+          "name": "committer_name",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -396,7 +383,7 @@
           "nullable": true
         },
         {
-          "name": "committerEmail",
+          "name": "committer_email",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -404,7 +391,7 @@
           "nullable": true
         },
         {
-          "name": "committerWhen",
+          "name": "committer_when",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -412,7 +399,7 @@
           "nullable": true
         },
         {
-          "name": "committerTz",
+          "name": "committer_tz",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -420,7 +407,7 @@
           "nullable": true
         },
         {
-          "name": "parentCount",
+          "name": "parent_count",
           "type": {
             "k": "scalar",
             "name": "int32",
@@ -430,7 +417,7 @@
           "default": 0
         },
         {
-          "name": "isMerge",
+          "name": "is_merge",
           "type": {
             "k": "scalar",
             "name": "boolean"
@@ -447,7 +434,7 @@
           }
         },
         {
-          "name": "gpgSigned",
+          "name": "gpg_signed",
           "type": {
             "k": "scalar",
             "name": "boolean"
@@ -476,11 +463,9 @@
             "fkColumns": [
               "parent_oid"
             ],
-            "typeColumn": null,
             "sourceColumns": [
               "commit_oid"
-            ],
-            "sourceTypeColumn": null
+            ]
           }
         }
       ]
@@ -515,8 +500,7 @@
             "typeColumn": "entry_type",
             "sourceColumns": [
               "tree_oid"
-            ],
-            "sourceTypeColumn": null
+            ]
           }
         }
       ]
@@ -537,7 +521,7 @@
           "nullable": false
         },
         {
-          "name": "isBinary",
+          "name": "is_binary",
           "type": {
             "k": "scalar",
             "name": "boolean"
@@ -546,7 +530,7 @@
           "default": false
         },
         {
-          "name": "contentText",
+          "name": "content_text",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -554,7 +538,7 @@
           "nullable": true
         },
         {
-          "name": "contentSha",
+          "name": "content_sha",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -576,13 +560,13 @@
       "name": "FileChange",
       "table": "file_changes",
       "key": [
-        "commit",
+        "commit_oid",
         "path"
       ],
       "doc": "Per-commit file changes — a WEAK ENTITY: identified by (owner, path), no\nglobal id of its own. Authored as an entity with FK-in-PK; whether it should\n*also* be a",
       "fields": [
         {
-          "name": "commit",
+          "name": "commit_oid",
           "type": {
             "k": "ref",
             "name": "Commit",
@@ -594,13 +578,9 @@
             "to": "Commit",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "commit_oid"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
@@ -613,7 +593,7 @@
           "key": true
         },
         {
-          "name": "oldPath",
+          "name": "old_path",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -647,7 +627,7 @@
           "nullable": true
         },
         {
-          "name": "blob",
+          "name": "blob_oid",
           "type": {
             "k": "ref",
             "name": "Blob",
@@ -658,17 +638,13 @@
             "to": "Blob",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "blob_oid"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
-          "name": "oldBlob",
+          "name": "old_blob_oid",
           "type": {
             "k": "ref",
             "name": "Blob",
@@ -679,13 +655,9 @@
             "to": "Blob",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "old_blob_oid"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         }
       ]
@@ -694,13 +666,13 @@
       "name": "Ref",
       "table": "refs",
       "key": [
-        "repo",
+        "repo_id",
         "name"
       ],
       "doc": "Branches, tags, remote-tracking refs, and HEAD — one row each.",
       "fields": [
         {
-          "name": "repo",
+          "name": "repo_id",
           "type": {
             "k": "ref",
             "name": "Repo",
@@ -712,13 +684,9 @@
             "to": "Repo",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "repo_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
@@ -740,7 +708,7 @@
           "nullable": false
         },
         {
-          "name": "target",
+          "name": "target_oid",
           "type": {
             "k": "ref",
             "name": "Commit",
@@ -752,17 +720,13 @@
             "to": "Commit",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "target_oid"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
-          "name": "isSymbolic",
+          "name": "is_symbolic",
           "type": {
             "k": "scalar",
             "name": "boolean"
@@ -784,14 +748,14 @@
       "name": "Conflict",
       "table": "conflicts",
       "key": [
-        "repo",
-        "mergeOid",
+        "repo_id",
+        "merge_oid",
         "path"
       ],
       "doc": "Merge-conflict hot zones (the north star). Populated by the `entl conflicts`\npass: replay every historical 2-parent merge with gix's 3-way tree merge and\nrecord the paths that conflicted. `unresolved` = git would have required a\nhuman, vs auto-resolved.",
       "fields": [
         {
-          "name": "repo",
+          "name": "repo_id",
           "type": {
             "k": "ref",
             "name": "Repo",
@@ -803,17 +767,13 @@
             "to": "Repo",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "repo_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
-          "name": "mergeOid",
+          "name": "merge_oid",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -883,7 +843,7 @@
           "nullable": true
         },
         {
-          "name": "lastSyncedAt",
+          "name": "last_synced_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -891,7 +851,7 @@
           "nullable": true
         },
         {
-          "name": "lastError",
+          "name": "last_error",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -947,13 +907,13 @@
       "name": "GhSubject",
       "abstract": true,
       "key": [
-        "repo",
+        "repo_id",
         "number"
       ],
       "doc": "The PR/Issue family — the SECOND polymorphic root already in production:\ngh_comments / gh_labeled / gh_assignees reference a subject as the pair\n(subject_type, subject_number) against this family's shared key\n(repo, number). Root carries ONLY the key: sharing data fields via\ninheritance would break per-leaf column-order parity (FINDINGS #6).",
       "fields": [
         {
-          "name": "repo",
+          "name": "repo_id",
           "type": {
             "k": "ref",
             "name": "Repo",
@@ -965,13 +925,9 @@
             "to": "Repo",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "repo_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
@@ -999,13 +955,11 @@
             "to": "GhLabel",
             "cardinality": "many",
             "kind": "association",
-            "properties": null,
             "table": "gh_labeled",
             "fkColumns": [
               "repo_id",
               "label_name"
             ],
-            "typeColumn": null,
             "sourceColumns": [
               "repo_id",
               "subject_type",
@@ -1029,12 +983,10 @@
             "to": "GhUser",
             "cardinality": "many",
             "kind": "association",
-            "properties": null,
             "table": "gh_assignees",
             "fkColumns": [
               "user_id"
             ],
-            "typeColumn": null,
             "sourceColumns": [
               "repo_id",
               "subject_type",
@@ -1042,63 +994,6 @@
             ],
             "sourceTypeColumn": "subject_type"
           }
-        }
-      ]
-    },
-    {
-      "name": "GhLabel",
-      "table": "gh_labels",
-      "key": [
-        "repo",
-        "name"
-      ],
-      "fields": [
-        {
-          "name": "repo",
-          "type": {
-            "k": "ref",
-            "name": "Repo",
-            "entity": true
-          },
-          "nullable": false,
-          "key": true,
-          "relation": {
-            "to": "Repo",
-            "cardinality": "one",
-            "kind": "association",
-            "properties": null,
-            "fkColumns": [
-              "repo_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
-          }
-        },
-        {
-          "name": "name",
-          "type": {
-            "k": "scalar",
-            "name": "string"
-          },
-          "nullable": false,
-          "key": true
-        },
-        {
-          "name": "color",
-          "type": {
-            "k": "scalar",
-            "name": "string"
-          },
-          "nullable": true
-        },
-        {
-          "name": "description",
-          "type": {
-            "k": "scalar",
-            "name": "string"
-          },
-          "nullable": true
         }
       ]
     },
@@ -1134,7 +1029,7 @@
           "nullable": false
         },
         {
-          "name": "author",
+          "name": "author_id",
           "type": {
             "k": "ref",
             "name": "GhUser",
@@ -1145,17 +1040,13 @@
             "to": "GhUser",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "author_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
-          "name": "createdAt",
+          "name": "created_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -1163,7 +1054,7 @@
           "nullable": true
         },
         {
-          "name": "updatedAt",
+          "name": "updated_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -1171,7 +1062,7 @@
           "nullable": true
         },
         {
-          "name": "closedAt",
+          "name": "closed_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -1179,7 +1070,7 @@
           "nullable": true
         },
         {
-          "name": "mergedAt",
+          "name": "merged_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -1187,7 +1078,7 @@
           "nullable": true
         },
         {
-          "name": "mergeCommit",
+          "name": "merge_commit_oid",
           "type": {
             "k": "ref",
             "name": "Commit",
@@ -1198,17 +1089,13 @@
             "to": "Commit",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "merge_commit_oid"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
-          "name": "headRef",
+          "name": "head_ref",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -1216,7 +1103,7 @@
           "nullable": true
         },
         {
-          "name": "baseRef",
+          "name": "base_ref",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -1242,7 +1129,7 @@
           "nullable": true
         },
         {
-          "name": "changedFiles",
+          "name": "changed_files",
           "type": {
             "k": "scalar",
             "name": "int32",
@@ -1251,7 +1138,7 @@
           "nullable": true
         },
         {
-          "name": "isDraft",
+          "name": "is_draft",
           "type": {
             "k": "scalar",
             "name": "boolean"
@@ -1277,7 +1164,7 @@
           "doc": "head commit CI rollup: SUCCESS | FAILURE | PENDING | … (open set — stays text)"
         },
         {
-          "name": "head",
+          "name": "head_oid",
           "type": {
             "k": "ref",
             "name": "Commit",
@@ -1289,17 +1176,13 @@
             "to": "Commit",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "head_oid"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
-          "name": "base",
+          "name": "base_oid",
           "type": {
             "k": "ref",
             "name": "Commit",
@@ -1311,13 +1194,9 @@
             "to": "Commit",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "base_oid"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
@@ -1336,21 +1215,18 @@
             "to": "Commit",
             "cardinality": "many",
             "kind": "association",
-            "properties": null,
             "table": "gh_pr_commits",
             "fkColumns": [
               "commit_oid"
             ],
-            "typeColumn": null,
             "sourceColumns": [
               "repo_id",
               "pr_number"
-            ],
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
-          "name": "requestedReviewers",
+          "name": "requested_reviewers",
           "type": {
             "k": "list",
             "of": {
@@ -1365,17 +1241,14 @@
             "to": "GhUser",
             "cardinality": "many",
             "kind": "association",
-            "properties": null,
             "table": "gh_requested_reviewers",
             "fkColumns": [
               "user_id"
             ],
-            "typeColumn": null,
             "sourceColumns": [
               "repo_id",
               "pr_number"
-            ],
-            "sourceTypeColumn": null
+            ]
           }
         }
       ]
@@ -1411,7 +1284,7 @@
           "nullable": false
         },
         {
-          "name": "author",
+          "name": "author_id",
           "type": {
             "k": "ref",
             "name": "GhUser",
@@ -1422,17 +1295,13 @@
             "to": "GhUser",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "author_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
-          "name": "createdAt",
+          "name": "created_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -1440,7 +1309,7 @@
           "nullable": true
         },
         {
-          "name": "updatedAt",
+          "name": "updated_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -1448,7 +1317,7 @@
           "nullable": true
         },
         {
-          "name": "closedAt",
+          "name": "closed_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -1488,18 +1357,15 @@
             "to": "GhSubject",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "repo_id",
               "subject_number"
             ],
-            "typeColumn": "subject_type",
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            "typeColumn": "subject_type"
           }
         },
         {
-          "name": "author",
+          "name": "author_id",
           "type": {
             "k": "ref",
             "name": "GhUser",
@@ -1510,13 +1376,9 @@
             "to": "GhUser",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "author_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
@@ -1528,10 +1390,63 @@
           "nullable": true
         },
         {
-          "name": "createdAt",
+          "name": "created_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
+          },
+          "nullable": true
+        }
+      ]
+    },
+    {
+      "name": "GhLabel",
+      "table": "gh_labels",
+      "key": [
+        "repo_id",
+        "name"
+      ],
+      "fields": [
+        {
+          "name": "repo_id",
+          "type": {
+            "k": "ref",
+            "name": "Repo",
+            "entity": true
+          },
+          "nullable": false,
+          "key": true,
+          "relation": {
+            "to": "Repo",
+            "cardinality": "one",
+            "kind": "association",
+            "fkColumns": [
+              "repo_id"
+            ]
+          }
+        },
+        {
+          "name": "name",
+          "type": {
+            "k": "scalar",
+            "name": "string"
+          },
+          "nullable": false,
+          "key": true
+        },
+        {
+          "name": "color",
+          "type": {
+            "k": "scalar",
+            "name": "string"
+          },
+          "nullable": true
+        },
+        {
+          "name": "description",
+          "type": {
+            "k": "scalar",
+            "name": "string"
           },
           "nullable": true
         }
@@ -1568,18 +1483,14 @@
             "to": "GhPullRequest",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "repo_id",
               "pr_number"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
-          "name": "reviewer",
+          "name": "reviewer_id",
           "type": {
             "k": "ref",
             "name": "GhUser",
@@ -1590,13 +1501,9 @@
             "to": "GhUser",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "reviewer_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
@@ -1608,7 +1515,7 @@
           "nullable": true
         },
         {
-          "name": "submittedAt",
+          "name": "submitted_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -1654,14 +1561,10 @@
             "to": "GhPullRequest",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "repo_id",
               "pr_number"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
@@ -1690,7 +1593,7 @@
           "nullable": true
         },
         {
-          "name": "commit",
+          "name": "commit_oid",
           "type": {
             "k": "ref",
             "name": "Commit",
@@ -1701,17 +1604,13 @@
             "to": "Commit",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "commit_oid"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
-          "name": "author",
+          "name": "author_id",
           "type": {
             "k": "ref",
             "name": "GhUser",
@@ -1722,13 +1621,9 @@
             "to": "GhUser",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "author_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
@@ -1740,7 +1635,7 @@
           "nullable": true
         },
         {
-          "name": "createdAt",
+          "name": "created_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -1748,7 +1643,7 @@
           "nullable": true
         },
         {
-          "name": "inReplyTo",
+          "name": "in_reply_to",
           "type": {
             "k": "ref",
             "name": "GhReviewComment",
@@ -1760,13 +1655,9 @@
             "to": "GhReviewComment",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "in_reply_to"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         }
       ]
@@ -1775,13 +1666,13 @@
       "name": "GhEvent",
       "table": "gh_events",
       "key": [
-        "repo",
+        "repo_id",
         "id"
       ],
       "doc": "Raw GitHub event stream (the /events feed) — entl's \"did anything happen?\"\nsignal AND a queryable activity log. The feed is capped (~300 events / 90\ndays): complete going FORWARD from when polling starts.",
       "fields": [
         {
-          "name": "repo",
+          "name": "repo_id",
           "type": {
             "k": "ref",
             "name": "Repo",
@@ -1793,13 +1684,9 @@
             "to": "Repo",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "repo_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
@@ -1820,7 +1707,7 @@
           "nullable": true
         },
         {
-          "name": "actor",
+          "name": "actor_id",
           "type": {
             "k": "ref",
             "name": "GhUser",
@@ -1832,17 +1719,13 @@
             "to": "GhUser",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "actor_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
-          "name": "actorLogin",
+          "name": "actor_login",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -1850,7 +1733,7 @@
           "nullable": true
         },
         {
-          "name": "createdAt",
+          "name": "created_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -1887,7 +1770,7 @@
           "key": true
         },
         {
-          "name": "repo",
+          "name": "repo_id",
           "type": {
             "k": "ref",
             "name": "Repo",
@@ -1898,13 +1781,9 @@
             "to": "Repo",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "repo_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
@@ -1951,7 +1830,7 @@
           "key": true
         },
         {
-          "name": "repo",
+          "name": "repo_id",
           "type": {
             "k": "ref",
             "name": "Repo",
@@ -1962,17 +1841,13 @@
             "to": "Repo",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "repo_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
-          "name": "workflow",
+          "name": "workflow_id",
           "type": {
             "k": "ref",
             "name": "GhWorkflow",
@@ -1983,17 +1858,13 @@
             "to": "GhWorkflow",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "workflow_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
-          "name": "head",
+          "name": "head_oid",
           "type": {
             "k": "ref",
             "name": "Commit",
@@ -2004,17 +1875,13 @@
             "to": "Commit",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "head_oid"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
-          "name": "headBranch",
+          "name": "head_branch",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -2046,7 +1913,7 @@
           "nullable": true
         },
         {
-          "name": "runNumber",
+          "name": "run_number",
           "type": {
             "k": "scalar",
             "name": "int32",
@@ -2055,7 +1922,7 @@
           "nullable": true
         },
         {
-          "name": "runAttempt",
+          "name": "run_attempt",
           "type": {
             "k": "scalar",
             "name": "int32",
@@ -2064,7 +1931,7 @@
           "nullable": true
         },
         {
-          "name": "createdAt",
+          "name": "created_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -2072,7 +1939,7 @@
           "nullable": true
         },
         {
-          "name": "updatedAt",
+          "name": "updated_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -2080,7 +1947,7 @@
           "nullable": true
         },
         {
-          "name": "runStartedAt",
+          "name": "run_started_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -2107,7 +1974,7 @@
           "key": true
         },
         {
-          "name": "run",
+          "name": "run_id",
           "type": {
             "k": "ref",
             "name": "GhWorkflowRun",
@@ -2118,13 +1985,9 @@
             "to": "GhWorkflowRun",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "run_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
@@ -2152,7 +2015,7 @@
           "nullable": true
         },
         {
-          "name": "startedAt",
+          "name": "started_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -2160,7 +2023,7 @@
           "nullable": true
         },
         {
-          "name": "completedAt",
+          "name": "completed_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -2168,7 +2031,7 @@
           "nullable": true
         },
         {
-          "name": "runnerName",
+          "name": "runner_name",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -2181,13 +2044,13 @@
       "name": "GhStep",
       "table": "gh_steps",
       "key": [
-        "job",
+        "job_id",
         "number"
       ],
       "doc": "Weak entity again: a step is (job, number), no global id.",
       "fields": [
         {
-          "name": "job",
+          "name": "job_id",
           "type": {
             "k": "ref",
             "name": "GhJob",
@@ -2199,13 +2062,9 @@
             "to": "GhJob",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "job_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
@@ -2243,7 +2102,7 @@
           "nullable": true
         },
         {
-          "name": "startedAt",
+          "name": "started_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -2251,7 +2110,7 @@
           "nullable": true
         },
         {
-          "name": "completedAt",
+          "name": "completed_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -2278,7 +2137,7 @@
           "key": true
         },
         {
-          "name": "repo",
+          "name": "repo_id",
           "type": {
             "k": "ref",
             "name": "Repo",
@@ -2289,17 +2148,13 @@
             "to": "Repo",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "repo_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
-          "name": "commit",
+          "name": "commit_oid",
           "type": {
             "k": "ref",
             "name": "Commit",
@@ -2310,13 +2165,9 @@
             "to": "Commit",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "commit_oid"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
@@ -2344,7 +2195,7 @@
           "nullable": true
         },
         {
-          "name": "startedAt",
+          "name": "started_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -2352,7 +2203,7 @@
           "nullable": true
         },
         {
-          "name": "completedAt",
+          "name": "completed_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -2379,7 +2230,7 @@
           "key": true
         },
         {
-          "name": "repo",
+          "name": "repo_id",
           "type": {
             "k": "ref",
             "name": "Repo",
@@ -2390,17 +2241,13 @@
             "to": "Repo",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "repo_id"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
-          "name": "commit",
+          "name": "commit_oid",
           "type": {
             "k": "ref",
             "name": "Commit",
@@ -2411,13 +2258,9 @@
             "to": "Commit",
             "cardinality": "one",
             "kind": "association",
-            "properties": null,
             "fkColumns": [
               "commit_oid"
-            ],
-            "typeColumn": null,
-            "sourceColumns": null,
-            "sourceTypeColumn": null
+            ]
           }
         },
         {
@@ -2445,7 +2288,7 @@
           "nullable": true
         },
         {
-          "name": "targetUrl",
+          "name": "target_url",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -2453,7 +2296,7 @@
           "nullable": true
         },
         {
-          "name": "createdAt",
+          "name": "created_at",
           "type": {
             "k": "scalar",
             "name": "utcDateTime"
@@ -2465,7 +2308,24 @@
   ],
   "relationProperties": [
     {
+      "name": "CommitParent",
+      "doc": "this commit's parents, ordered by `idx` (merges have several)",
+      "fields": [
+        {
+          "name": "idx",
+          "type": {
+            "k": "scalar",
+            "name": "int32",
+            "base": "numeric"
+          },
+          "nullable": false,
+          "key": true
+        }
+      ]
+    },
+    {
       "name": "TreeEntry",
+      "doc": "The polymorphic edge already in production: tree_entries stores the\n(type, key) pair as (entry_type, child_oid) — exactly DESIGN §2's\nprojection of a polymorphic association.",
       "fields": [
         {
           "name": "name",
@@ -2493,21 +2353,6 @@
           "nullable": false
         }
       ]
-    },
-    {
-      "name": "CommitParent",
-      "fields": [
-        {
-          "name": "idx",
-          "type": {
-            "k": "scalar",
-            "name": "int32",
-            "base": "numeric"
-          },
-          "nullable": false,
-          "key": true
-        }
-      ]
     }
   ],
   "valueStructs": [
@@ -2516,7 +2361,7 @@
       "doc": "What one git load produced.",
       "fields": [
         {
-          "name": "newCommits",
+          "name": "new_commits",
           "type": {
             "k": "scalar",
             "name": "int64",
@@ -2525,7 +2370,7 @@
           "nullable": false
         },
         {
-          "name": "fileChanges",
+          "name": "file_changes",
           "type": {
             "k": "scalar",
             "name": "int64",
@@ -2558,7 +2403,7 @@
           "nullable": false
         },
         {
-          "name": "pullRequests",
+          "name": "pull_requests",
           "type": {
             "k": "scalar",
             "name": "int64",
@@ -2576,7 +2421,7 @@
           "nullable": false
         },
         {
-          "name": "reviewComments",
+          "name": "review_comments",
           "type": {
             "k": "scalar",
             "name": "int64",
@@ -2603,7 +2448,7 @@
           "nullable": false
         },
         {
-          "name": "workflowRuns",
+          "name": "workflow_runs",
           "type": {
             "k": "scalar",
             "name": "int64",
@@ -2612,7 +2457,7 @@
           "nullable": false
         },
         {
-          "name": "checkRuns",
+          "name": "check_runs",
           "type": {
             "k": "scalar",
             "name": "int64",
@@ -2636,7 +2481,7 @@
       "doc": "What a sink() cycle produced: git + forge counts, and rows applied to the target.",
       "fields": [
         {
-          "name": "newCommits",
+          "name": "new_commits",
           "type": {
             "k": "scalar",
             "name": "int64",
@@ -2645,7 +2490,7 @@
           "nullable": false
         },
         {
-          "name": "fileChanges",
+          "name": "file_changes",
           "type": {
             "k": "scalar",
             "name": "int64",
@@ -2663,7 +2508,7 @@
           "nullable": false
         },
         {
-          "name": "pullRequests",
+          "name": "pull_requests",
           "type": {
             "k": "scalar",
             "name": "int64",
@@ -2690,7 +2535,7 @@
           "nullable": false
         },
         {
-          "name": "workflowRuns",
+          "name": "workflow_runs",
           "type": {
             "k": "scalar",
             "name": "int64",
@@ -2699,7 +2544,7 @@
           "nullable": false
         },
         {
-          "name": "checkRuns",
+          "name": "check_runs",
           "type": {
             "k": "scalar",
             "name": "int64",
@@ -2731,7 +2576,7 @@
           "nullable": false
         },
         {
-          "name": "oldPath",
+          "name": "old_path",
           "type": {
             "k": "scalar",
             "name": "string"
@@ -2993,7 +2838,7 @@
             "name": "string"
           },
           "nullable": false,
-          "doc": "duckdb | sqlite | jsonl | postgres. (Named `source`, not `from`: `from` is a\nPython keyword and awkward in JS — the op surface stays binding-friendly.)"
+          "doc": "duckdb | sqlite | jsonl | postgres."
         },
         {
           "name": "dest",

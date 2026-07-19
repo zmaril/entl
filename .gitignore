@@ -1,6 +1,17 @@
 # Rust build output
 /target
 
+# The schema crate (crates/entl-schema) is its own single-crate workspace and a
+# codegen-time TOOL, not part of entl's runtime. It reaches the fluessig derive
+# crates through a `fluessig/` symlink → $FLUESSIG_DIR that scripts/gen.sh creates
+# at codegen time (mirroring how the downstream fluessig-gen stage is located).
+# The symlink, its build dir, and its lockfile are all machine-local, never
+# committed — so the root `cargo build` / `rust` CI job never tries to resolve a
+# fluessig path dep with no checkout, and the codegen-freshness gate stays clean.
+/crates/entl-schema/fluessig
+/crates/entl-schema/target
+/crates/entl-schema/Cargo.lock
+
 # DuckDB databases
 *.duckdb
 *.duckdb.wal

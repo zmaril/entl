@@ -13,7 +13,12 @@ crate-type = ["cdylib"]
 [dependencies]
 # the `bytes` feature crosses bytes::Bytes as a binary Ruby String (Arrow IPC payloads)
 magnus = { version = "0.8", features = ["bytes"] }
+# raw Ruby C API for `rb_thread_call_without_gvl` — the generated streaming surface
+# releases the GVL around each blocking poll. Track magnus 0.8's rb-sys (^0.9.113).
+rb-sys = "0.9"
 bytes = "1"
 entl-core = { path = "../entl-core" }
+# the shared streaming contract (Poll/PollStream) the generated surface imports
+fluessig-runtime = { workspace = true }
 anyhow = "1"
 serde_json = "1"
