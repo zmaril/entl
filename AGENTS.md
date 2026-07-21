@@ -26,10 +26,17 @@ crates/entl-python   PyO3 bindings (built via maturin, mixed layout): the engine
                      CPython (`entl._entl`) + `entl.models` (generated SQLAlchemy read-plane —
                      read-only; create_all/drop_all are guarded, the sink owns the schema).
 crates/entl-ruby     Magnus bindings: the engine in-process in Ruby (rb_sys/rake-compiler build).
-schema/              entl's catalog: entl.tsp (TypeSpec, authored) + the emitted catalog.json /
-                     api.json / schema_docs.json. The schema TOOL that lowers + generates from
-                     these — fluessig — lives in its own repo (github.com/zmaril/fluessig); entl
-                     invokes it at codegen time (scripts/gen.sh). See the schema convention below.
+crates/entl-schema   entl's schema + op surface, AUTHORED as Rust derives with the fluessig
+                     Rust-derive front end (`#[derive(Entity)]` / `#[derive(Edge)]` /
+                     `#[fluessig::export]`, …). Its two emit bins print catalog.json / api.json.
+                     A codegen-time TOOL crate — its own single-crate workspace, excluded from the
+                     default cargo set. Reaches the fluessig derive crates via a gitignored
+                     `fluessig/` symlink → $FLUESSIG_DIR (scripts/gen.sh creates it). No TypeSpec,
+                     no Node.
+schema/              the emitted catalog.json / api.json / schema_docs.json (generated, committed).
+                     The schema TOOL that lowers + generates from the catalog — fluessig — lives in
+                     its own repo (github.com/zmaril/fluessig); entl invokes it at codegen time
+                     (scripts/gen.sh). See the schema convention below.
 site/                the docs site (Fumadocs — Next.js + MDX, static export). See notes/design/docs.md.
 notes/               design docs.
 ```
@@ -43,9 +50,10 @@ cargo test                       # Rust tests (e.g. crates/entl-core/src/github/
 
 # the napi addon → .node + index.js + index.d.ts
 cd crates/entl-node && bun run build
-bun run gen                      # regenerate ALL generated artifacts from schema/entl.tsp (runs
-                                 # scripts/gen.sh): schema_gen.rs, schema_docs.json, entl.models
-                                 # (py), tables.gen.ts + schema.gen.ts, the 3 binding surfaces.
+bun run gen                      # regenerate ALL generated artifacts from crates/entl-schema (the
+                                 # Rust-derive schema; runs scripts/gen.sh): catalog.json + api.json,
+                                 # then schema_gen.rs, schema_docs.json, entl.models (py),
+                                 # tables.gen.ts + schema.gen.ts, the 3 binding surfaces.
                                  # Needs the fluessig tool: a checkout at ../fluessig, or
                                  # FLUESSIG_DIR=<path>. CI's `node` job fails on any drift.
 bun test                         # coverage test: the sink must cover every entl table
@@ -59,7 +67,7 @@ uv venv && uv pip install --group dev   # ALL build/test deps — declared once 
 # Use the venv's own maturin/python (NOT `uv run maturin` — its editable install can load a
 # stale .so after a rebuild).
 .venv/bin/maturin develop
-# entl.models is GENERATED from schema/entl.tsp — regenerate via `bun run gen`
+# entl.models is GENERATED from crates/entl-schema — regenerate via `bun run gen`
 # in crates/entl-node (one command regenerates every ORM artifact + the Rust schema).
 .venv/bin/python -m pytest tests/   # sink/extract/rebuild/matrix/arrow + the SQLAlchemy models
 
@@ -110,24 +118,28 @@ maturin develop`), and the CLI (`cargo build --release`). The docs generator rea
 - **Forge-namespacing.** GitHub tables are `gh_*`; git-generic tables (`commits`, `refs`,
   `file_changes`, …) are bare so a future forge reuses them. Keep new GitHub tables `gh_`.
 - **One schema mechanism: the fluessig catalog, generated into code.** The schema's single source
-  of truth is `schema/entl.tsp` (all tables, keys, relations, docs). The tool that lowers +
-  generates it, **fluessig, lives in its own repo** (github.com/zmaril/fluessig); entl invokes it
-  at codegen time via `scripts/gen.sh` (which locates fluessig via a `../fluessig` checkout or
-  `FLUESSIG_DIR`). The chain: `schema/entl.tsp` → (fluessig emitter) → `schema/catalog.json` +
-  `schema/api.json` → (`fluessig-gen`) → the COMMITTED `schema_gen.rs` (per-dialect
-  `__table__`-templated DDL + PKs, consumed by `db.rs` and the sinks at zero runtime cost) +
-  `schema/schema_docs.json` (feeds the docs site's schema reference) + the ORM/binding surfaces.
-  Just run `bun run gen` in `crates/entl-node` — it drives the whole chain. The store is a
-  **derived cache**: `db.rs` content-hashes the generated schema + `migrations/duckdb/extras.sql`
-  (the one hand-written SQL left — macros + hex views) and on any change **drops every table and
-  rebuilds**; the caller re-ingests. **Add a table** = edit `schema/entl.tsp`, run `bun run gen`,
-  commit — CI's `node` job regenerates against fluessig and **fails on any drift** in a committed
-  artifact. NB: DuckDB Appenders are positional — the generated column order is canonical; ingest
-  appenders follow it.
-- **Schema docs live in `schema/entl.tsp`.** TypeSpec doc comments (`/** … */`) on models and fields
-  flow through `catalog.json` → `schema_docs.json` → the docs site's schema reference. Same idea
-  for Rust (`///`), the napi bindings (JSDoc), and the CLI (clap `///` help) — the generator ports
-  all of them.
+  of truth is `crates/entl-schema` (all tables, keys, relations, docs), AUTHORED as Rust derives
+  with the fluessig **Rust-derive front end** (`#[derive(Entity)]` / `#[derive(Edge)]` /
+  `#[derive(Enum)]` / `#[derive(Scalar)]` / `#[derive(Record)]` / `#[fluessig::export]`). The tool
+  that lowers + generates from it, **fluessig, lives in its own repo** (github.com/zmaril/fluessig);
+  entl invokes it at codegen time via `scripts/gen.sh` (which locates fluessig via a `../fluessig`
+  checkout or `FLUESSIG_DIR`). The chain: `crates/entl-schema` → (its `fluessig-emit` /
+  `fluessig-emit-api` bins) → `schema/catalog.json` + `schema/api.json` → (`fluessig-gen`) → the
+  COMMITTED `schema_gen.rs` (per-dialect `__table__`-templated DDL + PKs, consumed by `db.rs` and
+  the sinks at zero runtime cost) + `schema/schema_docs.json` (feeds the docs site's schema
+  reference) + the ORM/binding surfaces. There is **no TypeSpec and no Node** in this chain. Just
+  run `bun run gen` in `crates/entl-node` — it drives the whole chain. The store is a **derived
+  cache**: `db.rs` content-hashes the generated schema + `migrations/duckdb/extras.sql` (the one
+  hand-written SQL left — macros + hex views) and on any change **drops every table and rebuilds**;
+  the caller re-ingests. **Add a table** = edit `crates/entl-schema/src/lib.rs` (and list the new
+  item in its `catalog!`), run `bun run gen`, commit — CI's `node` job regenerates against fluessig
+  and **fails on any drift** in a committed artifact. NB: DuckDB Appenders are positional — the
+  generated column order is canonical; ingest appenders follow it.
+- **Schema docs live in `crates/entl-schema`.** Rust doc comments (`///`) on the derive structs,
+  fields, and `#[fluessig::export]` ops flow through `catalog.json` / `api.json` →
+  `schema_docs.json` → the docs site's schema reference, and into the napi bindings (JSDoc), the
+  SQLAlchemy models, and the CLI (clap `///` help) — the generator ports them all. (A plain `//`
+  line comment is NOT a doc comment and does not flow through — use it for author-only notes.)
 - **entl-core stays synchronous.** Async is a per-binding concern; the napi layer offloads
   to a threadpool and returns Promises. Don't make the core async.
 - **In-process means one DB.** The napi binding shares the DuckDB connection via

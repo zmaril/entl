@@ -13,6 +13,16 @@ version = "0.0.0"
 edition = "2021"
 license = "MIT"
 
+# The shared streaming-runtime contract (`Poll` / `PollStream`) that fluessig's
+# generated binding surfaces import (`use fluessig_runtime::{Poll, PollStream};`).
+# It ships from the fluessig repo; pin it to the SAME rev the codegen tool is
+# pinned to (FLUESSIG_REF in .github/workflows/ci.yml + scripts/gen.sh's
+# $FLUESSIG_DIR) so the runtime contract and the emitter never drift. Only the
+# three binding crates (node/python/ruby) depend on it; core/cli never do, so the
+# default `cargo build` still needs nothing from fluessig at build time.
+[workspace.dependencies]
+fluessig-runtime = { git = "https://github.com/zmaril/fluessig", rev = "32802a6d5164dfc77345db7e094cc9c94f9341e9" }
+
 [profile.release]
 lto = "thin"
 
