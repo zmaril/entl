@@ -41,9 +41,9 @@ type Col = {
 };
 type Table = { name: string; cols: Col[]; desc?: string };
 
-// The schema reference as data: fluessig lowers the catalog (schema/entl.tsp) into
+// The schema reference as data: fluessig lowers the catalog (crates/entl-schema) into
 // schema/schema_docs.json — per physical table, the columns with their DuckDB
-// types, flags, and the docs authored in entl.tsp. Regenerate with `bun run gen`
+// types, flags, and the docs authored on the derive structs. Regenerate with `bun run gen`
 // in crates/entl-node (which runs scripts/gen.sh).
 function parseTables(): Table[] {
   type Raw = {

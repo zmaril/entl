@@ -22,7 +22,7 @@ use serde_json::Value;
 use std::time::Duration;
 
 // Schema + keys come from the GENERATED module `schema_gen` — the entl catalog
-// (schema/entl.tsp) lowered to committed Rust source by fluessig-gen. No runtime
+// (crates/entl-schema) lowered to committed Rust source by fluessig-gen. No runtime
 // parsing/rendering: the schema is code (like tables.gen.ts / models.py); CI's
 // codegen-freshness job (the `node` job) regenerates + fails on drift.
 use crate::schema_gen::{TableSchema, PG_TABLES};
@@ -260,7 +260,7 @@ pub fn backfill(conn: &duckdb::Connection, sink: &mut dyn Sink, tables: &[&str])
 
 /// The tables a driver sink can mirror — the default backfill set: every physical table the
 /// catalog describes (entity + association/edge tables). Catalog-driven, so a table added to
-/// `entl.tsp` joins the mirror on regeneration.
+/// `crates/entl-schema` joins the mirror on regeneration.
 pub fn driver_tables() -> Vec<&'static str> {
     PG_TABLES.iter().map(|t| t.name).collect()
 }

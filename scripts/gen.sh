@@ -2,13 +2,16 @@
 # Regenerate every artifact derived from the fluessig catalog (schema_gen.rs,
 # schema_docs.json, entl.models, tables.gen.ts, schema.gen.ts, and the three
 # binding surfaces). The schema tool lives in its own repo now
-# (github.com/zmaril/fluessig); this drives it against entl's schema/entl.tsp.
+# (github.com/zmaril/fluessig); this drives it against entl's OWN schema crate.
+#
+# entl's schema is authored as Rust derives in crates/entl-schema (the fluessig
+# Rust-derive front end) — there is no TypeSpec or Node in this chain anymore.
 #
 # fluessig is located via $FLUESSIG_DIR:
 #   - locally: a sibling checkout (defaults to ../fluessig next to this repo).
 #   - in CI:   a pinned clone (see .github/workflows/ci.yml), exported as FLUESSIG_DIR.
 #
-# The chain: schema/entl.tsp --(emitter)--> schema/{catalog,api}.json
+# The chain: crates/entl-schema --(cargo run emit bins)--> schema/{catalog,api}.json
 #            schema/catalog.json --(fluessig-gen)--> the committed generated files.
 set -euo pipefail
 
@@ -21,19 +24,17 @@ if [ -z "${FLUESSIG_DIR:-}" ] || [ ! -f "$FLUESSIG_DIR/Cargo.toml" ]; then
   exit 1
 fi
 
-# 1. entl.tsp -> catalog.json + api.json (the emitter needs its node deps)
-if [ ! -d "$FLUESSIG_DIR/emitter/node_modules" ]; then
-  (cd "$FLUESSIG_DIR/emitter" && npm install)
-fi
-# entl.tsp imports the fluessig decorator library by the relative path it has
-# when it sits beside the tool (`./typespec/lib.tsp`). Post-split it lives in
-# entl/schema/, so compile a staging copy with the lib symlinked next to it —
-# this keeps entl.tsp untouched (and byte-identical to fluessig's own fixture).
-STAGE="$(mktemp -d)"
-trap 'rm -rf "$STAGE"' EXIT
-cp "$REPO/schema/entl.tsp" "$STAGE/entl.tsp"
-ln -s "$FLUESSIG_DIR/typespec" "$STAGE/typespec"
-(cd "$FLUESSIG_DIR/emitter" && node emit.mjs "$STAGE/entl.tsp" --out "$REPO/schema")
+# 1. crates/entl-schema (the derive front end) -> catalog.json + api.json.
+#    The schema crate is its own single-crate workspace; it reaches the fluessig
+#    derive crates through a gitignored `fluessig/` symlink → $FLUESSIG_DIR (the
+#    same $FLUESSIG_DIR the downstream fluessig-gen stage uses). Refresh it here
+#    so a fresh checkout / a moved FLUESSIG_DIR resolves cleanly.
+SCHEMA="$REPO/crates/entl-schema"
+ln -sfn "$FLUESSIG_DIR" "$SCHEMA/fluessig"
+cargo run -q --manifest-path "$SCHEMA/Cargo.toml" --bin fluessig-emit \
+  > "$REPO/schema/catalog.json"
+cargo run -q --manifest-path "$SCHEMA/Cargo.toml" --bin fluessig-emit-api \
+  > "$REPO/schema/api.json"
 
 # 2. catalog.json + api.json -> the committed generated files
 cargo run -q --manifest-path "$FLUESSIG_DIR/Cargo.toml" --bin fluessig-gen -- \
