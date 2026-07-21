@@ -5,26 +5,46 @@
 use magnus::{function, method, prelude::*, Error, Ruby};
 use std::sync::Arc;
 use std::time::Duration;
+// The shared streaming contract — Poll/PollStream live in the fluessig-runtime crate.
+use fluessig_runtime::{Poll, PollStream};
 
 fn rberr(e: impl std::fmt::Display) -> Error {
     let ruby = magnus::Ruby::get().expect("entl called outside the Ruby GVL");
     Error::new(ruby.exception_runtime_error(), e.to_string())
 }
 
-/// One poll result from a core stream (the sync primitive every stream shape dresses).
-pub enum Poll<T> {
-    Item(T),
-    Idle,
-    Closed,
-}
-
-/// The one sync primitive: a blocking, timeout-bounded poll.
-pub trait PollStream<T>: Send + Sync {
-    fn poll(&self, timeout: Duration) -> Poll<T>;
-}
-
 /// Bulk bytes cross into Ruby as a binary String (via magnus's `bytes` feature).
 pub type Bytes = bytes::Bytes;
+
+use std::ffi::c_void;
+use std::ptr;
+
+/// Run `func` with the Ruby GVL released; returns its result once the GVL is
+/// re-acquired. `func` MUST NOT touch any Ruby object (no Value/alloc) — extract
+/// the poll result here, act on it (yield/raise) only after this returns.
+fn without_gvl<F, R>(func: F) -> R
+where
+    F: FnOnce() -> R, // no Send bound: runs on the same OS thread
+{
+    unsafe extern "C" fn trampoline<F, R>(data: *mut c_void) -> *mut c_void
+    where
+        F: FnOnce() -> R,
+    {
+        let slot = &mut *(data as *mut Option<F>);
+        let f = slot.take().expect("gvl closure already consumed");
+        Box::into_raw(Box::new(f())) as *mut c_void
+    }
+    let mut slot: Option<F> = Some(func);
+    let result_ptr = unsafe {
+        rb_sys::rb_thread_call_without_gvl(
+            Some(trampoline::<F, R>),
+            &mut slot as *mut Option<F> as *mut c_void,
+            None,
+            ptr::null_mut(),
+        )
+    };
+    *unsafe { Box::from_raw(result_ptr as *mut R) }
+}
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum SinkTarget {
@@ -366,37 +386,141 @@ fn ls_remote_heads(repo_path: String, pattern: String) -> Result<magnus::RArray,
     Ok(ary)
 }
 
-/// Poll-based stream from `Entl.changes` — `.next` returns the next item or nil.
+/// Poll-based stream from `Entl.changes`.
+///
+/// Primary surface: `each` — yields each event to a block, and returns an
+/// `Enumerator` when called with NO block (so `.lazy`/`.map`/`.next` compose).
+/// Retained surface: the `.next` poll cursor (fallible since P1) for consumers
+/// that want an explicit pull rather than a block.
 #[magnus::wrap(class = "Entl::Changes", free_immediately, size)]
 pub struct Changes {
     stream: Box<dyn PollStream<ChangeBatch>>,
 }
 impl Changes {
-    fn next(&self) -> Option<ChangeBatch> {
+    // A terminal `Poll::Failed` raises a Ruby RuntimeError (mirrors node's
+    // default throw-mode): the sync `.next` cursor has no error-as-event
+    // surface, so a mid-stream core failure surfaces as `rberr(e)`.
+    fn next(&self) -> Result<Option<ChangeBatch>, Error> {
         loop {
-            match self.stream.poll(Duration::from_millis(500)) {
-                Poll::Item(v) => return Some(v),
+            // GVL released around the blocking poll; the `Poll<item>` is a
+            // pure-Rust value, so no Ruby object is touched while released.
+            let poll = without_gvl(|| self.stream.poll(Duration::from_millis(500)));
+            match poll {
+                Poll::Item(v) => return Ok(Some(v)),
                 Poll::Idle => continue,
-                Poll::Closed => return None, // nil ends iteration
+                Poll::Closed => return Ok(None), // nil ends iteration
+                Poll::Failed(e) => return Err(rberr(e)), // raises on failure
             }
         }
     }
+    // Idiomatic streaming surface. With a block: yield each event, skipping
+    // idle polls and ending at `Poll::Closed`. With NO block: return an
+    // `Enumerator` over `each`, so `.lazy`/`.map`/`.next` compose (Ruby >= 3.1
+    // for an Enumerator built from a yielding method). `Obj<Self>` is the
+    // receiver so `enumeratorize` has the Ruby self value and the field is
+    // still reachable via Deref. The blocking `poll` runs with the GVL
+    // RELEASED (via `without_gvl` → `rb_thread_call_without_gvl`), so an
+    // idling/blocking stream does not stall other Ruby threads; the Ruby
+    // ops (yield/raise) stay OUTSIDE the released region. See
+    // notes/async-iterable-streams-ruby.md.
+    fn each(ruby: &Ruby, rb_self: magnus::typed_data::Obj<Self>) -> Result<magnus::Value, Error> {
+        // No block => hand back an Enumerator so `.lazy`/`.map`/`.next` work.
+        if !ruby.block_given() {
+            return Ok(rb_self.enumeratorize("each", ()).as_value());
+        }
+        loop {
+            // GVL released around the blocking poll; the `Poll<item>` is a
+            // pure-Rust value, so no Ruby object is touched while released.
+            // yield_value / the ErrorEvent yield / the raise all run AFTER.
+            let poll = without_gvl(|| rb_self.stream.poll(Duration::from_millis(500)));
+            match poll {
+                Poll::Item(v) => {
+                    let _: magnus::Value = ruby.yield_value(v)?;
+                }
+                Poll::Idle => continue,
+                Poll::Closed => break,
+                Poll::Failed(e) => return Err(rberr(e)), // throw-mode: raises in Ruby
+            }
+        }
+        // `each` returns the receiver, like `Array#each`.
+        Ok(rb_self.as_value())
+    }
+}
+// Backstop: an early `break` out of the block leaves the stream
+// un-exhausted, so `Drop` guarantees the core stream is closed and its
+// resources released (the `close()` default is an idempotent no-op).
+impl Drop for Changes {
+    fn drop(&mut self) {
+        self.stream.close();
+    }
 }
 
-/// Poll-based stream from `Entl.driverPlan` — `.next` returns the next item or nil.
+/// Poll-based stream from `Entl.driverPlan`.
+///
+/// Primary surface: `each` — yields each event to a block, and returns an
+/// `Enumerator` when called with NO block (so `.lazy`/`.map`/`.next` compose).
+/// Retained surface: the `.next` poll cursor (fallible since P1) for consumers
+/// that want an explicit pull rather than a block.
 #[magnus::wrap(class = "Entl::DriverPlan", free_immediately, size)]
 pub struct DriverPlan {
     stream: Box<dyn PollStream<Statement>>,
 }
 impl DriverPlan {
-    fn next(&self) -> Option<Statement> {
+    // A terminal `Poll::Failed` raises a Ruby RuntimeError (mirrors node's
+    // default throw-mode): the sync `.next` cursor has no error-as-event
+    // surface, so a mid-stream core failure surfaces as `rberr(e)`.
+    fn next(&self) -> Result<Option<Statement>, Error> {
         loop {
-            match self.stream.poll(Duration::from_millis(500)) {
-                Poll::Item(v) => return Some(v),
+            // GVL released around the blocking poll; the `Poll<item>` is a
+            // pure-Rust value, so no Ruby object is touched while released.
+            let poll = without_gvl(|| self.stream.poll(Duration::from_millis(500)));
+            match poll {
+                Poll::Item(v) => return Ok(Some(v)),
                 Poll::Idle => continue,
-                Poll::Closed => return None, // nil ends iteration
+                Poll::Closed => return Ok(None), // nil ends iteration
+                Poll::Failed(e) => return Err(rberr(e)), // raises on failure
             }
         }
+    }
+    // Idiomatic streaming surface. With a block: yield each event, skipping
+    // idle polls and ending at `Poll::Closed`. With NO block: return an
+    // `Enumerator` over `each`, so `.lazy`/`.map`/`.next` compose (Ruby >= 3.1
+    // for an Enumerator built from a yielding method). `Obj<Self>` is the
+    // receiver so `enumeratorize` has the Ruby self value and the field is
+    // still reachable via Deref. The blocking `poll` runs with the GVL
+    // RELEASED (via `without_gvl` → `rb_thread_call_without_gvl`), so an
+    // idling/blocking stream does not stall other Ruby threads; the Ruby
+    // ops (yield/raise) stay OUTSIDE the released region. See
+    // notes/async-iterable-streams-ruby.md.
+    fn each(ruby: &Ruby, rb_self: magnus::typed_data::Obj<Self>) -> Result<magnus::Value, Error> {
+        // No block => hand back an Enumerator so `.lazy`/`.map`/`.next` work.
+        if !ruby.block_given() {
+            return Ok(rb_self.enumeratorize("each", ()).as_value());
+        }
+        loop {
+            // GVL released around the blocking poll; the `Poll<item>` is a
+            // pure-Rust value, so no Ruby object is touched while released.
+            // yield_value / the ErrorEvent yield / the raise all run AFTER.
+            let poll = without_gvl(|| rb_self.stream.poll(Duration::from_millis(500)));
+            match poll {
+                Poll::Item(v) => {
+                    let _: magnus::Value = ruby.yield_value(v)?;
+                }
+                Poll::Idle => continue,
+                Poll::Closed => break,
+                Poll::Failed(e) => return Err(rberr(e)), // throw-mode: raises in Ruby
+            }
+        }
+        // `each` returns the receiver, like `Array#each`.
+        Ok(rb_self.as_value())
+    }
+}
+// Backstop: an early `break` out of the block leaves the stream
+// un-exhausted, so `Drop` guarantees the core stream is closed and its
+// resources released (the `close()` default is an idempotent no-op).
+impl Drop for DriverPlan {
+    fn drop(&mut self) {
+        self.stream.close();
     }
 }
 
@@ -607,8 +731,10 @@ pub fn register(ruby: &Ruby) -> Result<(), Error> {
     class.define_singleton_method("ls_remote_heads", function!(ls_remote_heads, 2))?;
     let s = class.define_class("Changes", ruby.class_object())?;
     s.define_method("next", method!(Changes::next, 0))?;
+    s.define_method("each", method!(Changes::each, 0))?;
     let s = class.define_class("DriverPlan", ruby.class_object())?;
     s.define_method("next", method!(DriverPlan::next, 0))?;
+    s.define_method("each", method!(DriverPlan::each, 0))?;
     class.define_singleton_method("new", function!(Entl::new, 1))?;
     class.define_method("load_git", method!(Entl::load_git, 1))?;
     class.define_method("load_github", method!(Entl::load_github, 1))?;
