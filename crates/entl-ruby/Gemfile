@@ -4,5 +4,5 @@
 source "https://rubygems.org"
 
 gem "rb_sys", "~> 0.9"
-gem "minitest", "~> 5.25"
+gem "minitest", "~> 6.0"
 gem "rubocop", "~> 1.88", require: false
