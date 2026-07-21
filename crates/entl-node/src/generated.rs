@@ -3,26 +3,17 @@
 #![allow(clippy::all)]
 
 // The fixed prelude — generated code uses fully-qualified paths elsewhere.
-use napi::bindgen_prelude::{AsyncTask, Result};
+use napi::bindgen_prelude::{AsyncGenerator, AsyncTask, Result};
 use napi::{Env, Task};
 use napi_derive::napi;
+use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
+// The shared streaming contract — Poll/PollStream live in the fluessig-runtime crate.
+use fluessig_runtime::{Poll, PollStream};
 
 fn err(e: impl std::fmt::Display) -> napi::Error {
     napi::Error::from_reason(e.to_string())
-}
-
-/// One poll result from a core stream (the sync primitive every stream shape dresses).
-pub enum Poll<T> {
-    Item(T),
-    Idle,
-    Closed,
-}
-
-/// The one sync primitive: a blocking, timeout-bounded poll.
-pub trait PollStream<T>: Send + Sync {
-    fn poll(&self, timeout: Duration) -> Poll<T>;
 }
 
 /// Bulk bytes cross into JS as a Buffer (Arrow IPC payloads and friends).
@@ -383,11 +374,79 @@ pub fn ls_remote_heads(repo_path: String, pattern: String) -> AsyncTask<LsRemote
     AsyncTask::new(LsRemoteHeadsTask { repo_path, pattern })
 }
 
-/// Poll-based stream from `Entl.changes` — call `next()` until it resolves null.
-#[napi]
+/// Event stream from `Entl.changes`.
+///
+/// Primary surface: a JS async-iterable — `for await (const ev of stream)`.
+/// Retained surface: `next()` poll cursor (resolves `null` at end) for
+/// consumers that cannot use async iteration or napi's `tokio_rt` feature.
+///
+/// DEFAULT error model = idiomatic native-TS REJECT: a mid-stream core
+/// failure (`Poll::Failed`) maps to `Err(err(e))`, so the awaited pull
+/// REJECTS and the `for await` loop THROWS — safe by default, never a
+/// silent-swallow. Annotate the op `@streamError` to opt into the
+/// error-AS-EVENT model instead (mirror a source library like pi).
+#[napi(async_iterator)]
 pub struct Changes {
     stream: Arc<dyn PollStream<ChangeBatch>>,
 }
+
+// Async-iterable surface (Symbol.asyncIterator). napi drives one pull at a
+// time, so backpressure is one in-flight poll by construction.
+#[napi]
+impl AsyncGenerator for Changes {
+    type Yield = ChangeBatch;
+    type Next = ();
+    type Return = ();
+
+    fn next(
+        &mut self,
+        _value: Option<Self::Next>,
+    ) -> impl Future<Output = Result<Option<Self::Yield>>> + Send + 'static {
+        let stream = self.stream.clone();
+        async move {
+            loop {
+                let s = stream.clone();
+                // Drive the blocking poll off the async runtime so the Node
+                // event loop is never blocked.
+                let poll =
+                    napi::tokio::task::spawn_blocking(move || s.poll(Duration::from_millis(500)))
+                        .await
+                        .map_err(err)?;
+                // DEFAULT throw-mode: a mid-stream failure REJECTS the pull
+                // (native TS — the `for await` loop throws). Opt into
+                // error-as-event with `@streamError`.
+                match poll {
+                    Poll::Item(v) => return Ok(Some(v)),
+                    Poll::Idle => continue,
+                    Poll::Closed => return Ok(None),
+                    Poll::Failed(e) => return Err(err(e)),
+                }
+            }
+        }
+    }
+
+    fn complete(
+        &mut self,
+        _value: Option<Self::Return>,
+    ) -> impl Future<Output = Result<Option<Self::Yield>>> + Send + 'static {
+        // Cancellation: consumer called `return()` (e.g. `break` in for-await).
+        let stream = self.stream.clone();
+        async move {
+            stream.close();
+            Ok(None)
+        }
+    }
+}
+
+// Backstop: guarantee core-side close even if the consumer neither
+// exhausts nor cancels the iterator.
+impl Drop for Changes {
+    fn drop(&mut self) {
+        self.stream.close();
+    }
+}
+
+// Retained poll cursor: `next(): Promise<Item | null>`.
 pub struct NextChangesTask {
     stream: Arc<dyn PollStream<ChangeBatch>>,
 }
@@ -400,6 +459,8 @@ impl Task for NextChangesTask {
                 Poll::Item(v) => return Ok(Some(v)),
                 Poll::Idle => continue,
                 Poll::Closed => return Ok(None),
+                // throw-mode: reject the pull (native TS).
+                Poll::Failed(e) => return Err(err(e)),
             }
         }
     }
@@ -417,11 +478,79 @@ impl Changes {
     }
 }
 
-/// Poll-based stream from `Entl.driverPlan` — call `next()` until it resolves null.
-#[napi]
+/// Event stream from `Entl.driverPlan`.
+///
+/// Primary surface: a JS async-iterable — `for await (const ev of stream)`.
+/// Retained surface: `next()` poll cursor (resolves `null` at end) for
+/// consumers that cannot use async iteration or napi's `tokio_rt` feature.
+///
+/// DEFAULT error model = idiomatic native-TS REJECT: a mid-stream core
+/// failure (`Poll::Failed`) maps to `Err(err(e))`, so the awaited pull
+/// REJECTS and the `for await` loop THROWS — safe by default, never a
+/// silent-swallow. Annotate the op `@streamError` to opt into the
+/// error-AS-EVENT model instead (mirror a source library like pi).
+#[napi(async_iterator)]
 pub struct DriverPlan {
     stream: Arc<dyn PollStream<Statement>>,
 }
+
+// Async-iterable surface (Symbol.asyncIterator). napi drives one pull at a
+// time, so backpressure is one in-flight poll by construction.
+#[napi]
+impl AsyncGenerator for DriverPlan {
+    type Yield = Statement;
+    type Next = ();
+    type Return = ();
+
+    fn next(
+        &mut self,
+        _value: Option<Self::Next>,
+    ) -> impl Future<Output = Result<Option<Self::Yield>>> + Send + 'static {
+        let stream = self.stream.clone();
+        async move {
+            loop {
+                let s = stream.clone();
+                // Drive the blocking poll off the async runtime so the Node
+                // event loop is never blocked.
+                let poll =
+                    napi::tokio::task::spawn_blocking(move || s.poll(Duration::from_millis(500)))
+                        .await
+                        .map_err(err)?;
+                // DEFAULT throw-mode: a mid-stream failure REJECTS the pull
+                // (native TS — the `for await` loop throws). Opt into
+                // error-as-event with `@streamError`.
+                match poll {
+                    Poll::Item(v) => return Ok(Some(v)),
+                    Poll::Idle => continue,
+                    Poll::Closed => return Ok(None),
+                    Poll::Failed(e) => return Err(err(e)),
+                }
+            }
+        }
+    }
+
+    fn complete(
+        &mut self,
+        _value: Option<Self::Return>,
+    ) -> impl Future<Output = Result<Option<Self::Yield>>> + Send + 'static {
+        // Cancellation: consumer called `return()` (e.g. `break` in for-await).
+        let stream = self.stream.clone();
+        async move {
+            stream.close();
+            Ok(None)
+        }
+    }
+}
+
+// Backstop: guarantee core-side close even if the consumer neither
+// exhausts nor cancels the iterator.
+impl Drop for DriverPlan {
+    fn drop(&mut self) {
+        self.stream.close();
+    }
+}
+
+// Retained poll cursor: `next(): Promise<Item | null>`.
 pub struct NextDriverPlanTask {
     stream: Arc<dyn PollStream<Statement>>,
 }
@@ -434,6 +563,8 @@ impl Task for NextDriverPlanTask {
                 Poll::Item(v) => return Ok(Some(v)),
                 Poll::Idle => continue,
                 Poll::Closed => return Ok(None),
+                // throw-mode: reject the pull (native TS).
+                Poll::Failed(e) => return Err(err(e)),
             }
         }
     }
@@ -626,6 +757,8 @@ impl Entl {
         })
     }
     /// Stream the change batches from one pull (the stream plane).
+    // pre-start boundary: building the stream (setup/validation) always
+    // THROWS on a core Err — independent of the stream's error model.
     #[napi]
     pub fn changes(&self, repo_path: String, options: Option<ChangesOptions>) -> Result<Changes> {
         Ok(Changes {
@@ -633,6 +766,8 @@ impl Entl {
         })
     }
     /// Backfill this store into a driver target: stream {sql, params} for the host to execute.
+    // pre-start boundary: building the stream (setup/validation) always
+    // THROWS on a core Err — independent of the stream's error model.
     #[napi]
     pub fn driver_plan(&self, options: Option<DriverPlanOptions>) -> Result<DriverPlan> {
         Ok(DriverPlan {
