@@ -91,7 +91,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/rust-setup
       - uses: oven-sh/setup-bun@v2
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       # Cache the bun + npm *download* stores (not node_modules) so the binding
@@ -124,8 +124,11 @@ jobs:
           # The schema tool lives in its own repo; pin the SHA entl generates
           # against (a branch pin makes this job hostage to tool merges — a
           # fluessig change landed on main breaks freshness here until we bump).
-          # Bump deliberately when adopting a new fluessig.
-          FLUESSIG_REF: 1d586bbe3f5d3890cee91a22066ea0cfa7206006  # fluessig main (#36 merge): pins @typespec/compiler 1.14.0 (byte-stable emitter) + node string-enums
+          # Bump deliberately when adopting a new fluessig. This SHA is ALSO the
+          # rev the fluessig-runtime binding dependency is pinned to (see
+          # [workspace.dependencies] in the root Cargo.toml) — keep the two in
+          # lockstep so the emitter and the shared streaming contract never drift.
+          FLUESSIG_REF: 32802a6d5164dfc77345db7e094cc9c94f9341e9  # fluessig main: the Rust-derive front end (derive crates + fluessig-gen streaming surface + fluessig-runtime)
         run: |
           # Clone into RUNNER_TEMP (outside the workspace) so it can't register
           # as drift in the git-clean check below. Fetch the pinned SHA directly
